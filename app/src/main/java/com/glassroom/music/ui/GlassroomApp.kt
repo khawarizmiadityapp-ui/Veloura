@@ -58,7 +58,7 @@ fun GlassroomApp(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(GlassroomBackgroundBrush)
+            .background(com.glassroom.music.ui.theme.LocalGlassConfig.current.backgroundBrush)
     ) {
         // Main Navigation Content
         NavHost(

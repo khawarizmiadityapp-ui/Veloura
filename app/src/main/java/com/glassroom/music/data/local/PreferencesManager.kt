@@ -20,10 +20,15 @@ class PreferencesManager(private val context: Context) {
         val KEY_AUTOPLAY = booleanPreferencesKey("autoplay")
         val KEY_SHUFFLE = booleanPreferencesKey("shuffle_state")
         val KEY_REPEAT = stringPreferencesKey("repeat_mode")
+        val KEY_GLASS_INTENSITY = androidx.datastore.preferences.core.floatPreferencesKey("glass_intensity")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_THEME_MODE] ?: "light_glass"
+    }
+
+    val glassIntensityFlow: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_GLASS_INTENSITY] ?: 0.75f
     }
 
     val backendUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -41,6 +46,12 @@ class PreferencesManager(private val context: Context) {
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = mode
+        }
+    }
+
+    suspend fun setGlassIntensity(intensity: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_GLASS_INTENSITY] = intensity.coerceIn(0.2f, 1.0f)
         }
     }
 

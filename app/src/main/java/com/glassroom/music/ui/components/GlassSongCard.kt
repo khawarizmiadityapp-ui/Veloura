@@ -38,18 +38,29 @@ fun GlassSongCard(
     onFavoriteClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null
 ) {
+    val glassConfig = LocalGlassConfig.current
+
     val cardBg = if (isPlaying) {
-        Brush.horizontalGradient(
-            listOf(
-                Color(0xF5FFFFFF),
-                Color(0xEBEEF2F7)
+        if (glassConfig.isDark) {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFF242C3A),
+                    Color(0xFF1B212D)
+                )
             )
-        )
+        } else {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xF5FFFFFF),
+                    Color(0xEBEEF2F7)
+                )
+            )
+        }
     } else {
-        GlassSurfaceCardGradient
+        glassConfig.cardBrush
     }
 
-    val borderColor = if (isPlaying) Color(0x663B82F6) else GlassBorderWhite
+    val borderColor = if (isPlaying) GlassAccentCobalt else glassConfig.borderHighlight
 
     Box(
         modifier = modifier
@@ -57,7 +68,7 @@ fun GlassSongCard(
             .shadow(
                 elevation = if (isPlaying) 6.dp else 2.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x100F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x100F172A)
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = cardBg)
@@ -91,7 +102,7 @@ fun GlassSongCard(
                 Text(
                     text = track.title,
                     style = GlassTypography.titleMedium,
-                    color = if (isPlaying) Color(0xFF1E3A8A) else GlassTextPrimary,
+                    color = if (isPlaying) GlassAccentCobalt else glassConfig.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -99,7 +110,7 @@ fun GlassSongCard(
                 Text(
                     text = track.artist,
                     style = GlassTypography.bodyMedium,
-                    color = GlassTextSecondary,
+                    color = glassConfig.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

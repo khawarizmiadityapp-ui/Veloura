@@ -49,6 +49,8 @@ fun GlassBottomBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val glassConfig = LocalGlassConfig.current
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -60,21 +62,14 @@ fun GlassBottomBar(
                 .shadow(
                     elevation = 16.dp,
                     shape = RoundedCornerShape(32.dp),
-                    ambientColor = Color(0x1A0F172A),
-                    spotColor = Color(0x140F172A)
+                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A),
+                    spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x140F172A)
                 )
                 .clip(RoundedCornerShape(32.dp))
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xF2FFFFFF),
-                            Color(0xD9FFFFFF)
-                        )
-                    )
-                )
+                .background(brush = glassConfig.miniPlayerBrush)
                 .border(
                     width = 1.dp,
-                    color = GlassBorderHighlight,
+                    color = glassConfig.borderHighlight,
                     shape = RoundedCornerShape(32.dp)
                 )
                 .padding(horizontal = 8.dp, vertical = 8.dp)
@@ -87,7 +82,7 @@ fun GlassBottomBar(
                 BottomNavItems.forEach { item ->
                     val isSelected = currentRoute == item.route
                     val iconColor by animateColorAsState(
-                        targetValue = if (isSelected) GlassTextPrimary else GlassTextTertiary,
+                        targetValue = if (isSelected) glassConfig.textPrimary else glassConfig.textTertiary,
                         label = "icon_color"
                     )
                     val scale by animateFloatAsState(

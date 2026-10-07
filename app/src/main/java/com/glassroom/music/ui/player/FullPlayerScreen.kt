@@ -66,14 +66,16 @@ fun FullPlayerScreen(
         label = "scale_anim"
     )
 
+    val glassConfig = LocalGlassConfig.current
+
     if (currentTrack == null) {
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(GlassroomBackgroundBrush),
+                .background(glassConfig.backgroundBrush),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = "No track selected", style = GlassTypography.bodyLarge)
+            Text(text = "No track selected", style = GlassTypography.bodyLarge, color = glassConfig.textSecondary)
         }
         return
     }
@@ -81,7 +83,7 @@ fun FullPlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(GlassroomBackgroundBrush)
+            .background(glassConfig.backgroundBrush)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {

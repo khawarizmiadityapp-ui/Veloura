@@ -35,6 +35,7 @@ fun GlassTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    val glassConfig = LocalGlassConfig.current
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -51,13 +52,13 @@ fun GlassTopBar(
                     Text(
                         text = subtitle,
                         style = GlassTypography.labelSmall,
-                        color = GlassTextTertiary
+                        color = glassConfig.textTertiary
                     )
                 }
                 Text(
                     text = title,
                     style = GlassTypography.headlineLarge,
-                    color = GlassTextPrimary
+                    color = glassConfig.textPrimary
                 )
             }
             Row(
@@ -77,27 +78,21 @@ fun GlassSearchBar(
     placeholder: String = "Search songs, artists, albums...",
     onSearch: () -> Unit = {}
 ) {
+    val glassConfig = LocalGlassConfig.current
     Box(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
                 elevation = 6.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color(0x120F172A),
-                spotColor = Color(0x0A0F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A),
+                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0A0F172A)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xF2FFFFFF),
-                        Color(0xBFFFFFFF)
-                    )
-                )
-            )
+            .background(brush = glassConfig.miniPlayerBrush)
             .border(
                 width = 1.dp,
-                color = GlassBorderHighlight,
+                color = glassConfig.borderHighlight,
                 shape = RoundedCornerShape(24.dp)
             )
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -109,7 +104,7 @@ fun GlassSearchBar(
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = null,
-                tint = GlassTextSecondary,
+                tint = glassConfig.textSecondary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -118,15 +113,15 @@ fun GlassSearchBar(
                     Text(
                         text = placeholder,
                         style = GlassTypography.bodyLarge,
-                        color = GlassTextTertiary
+                        color = glassConfig.textTertiary
                     )
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = GlassTypography.bodyLarge.copy(color = GlassTextPrimary),
-                    cursorBrush = SolidColor(GlassTextPrimary),
+                    textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                    cursorBrush = SolidColor(glassConfig.textPrimary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     modifier = Modifier.fillMaxWidth()
@@ -136,7 +131,7 @@ fun GlassSearchBar(
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "Clear",
-                    tint = GlassTextSecondary,
+                    tint = glassConfig.textSecondary,
                     modifier = Modifier
                         .size(18.dp)
                         .clip(CircleShape)

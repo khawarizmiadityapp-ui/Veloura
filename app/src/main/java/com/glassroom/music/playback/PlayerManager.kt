@@ -211,6 +211,12 @@ class PlayerManager(
                 _isPlaying.value = true
                 _currentPosition.value = 0L
                 _duration.value = if (track.duration > 0) track.duration * 1000L else 0L
+
+                try {
+                    val serviceIntent = android.content.Intent(context, MusicService::class.java)
+                    androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
+                } catch (_: Exception) {
+                }
             }
         }
     }

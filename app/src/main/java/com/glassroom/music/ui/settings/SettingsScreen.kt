@@ -40,9 +40,13 @@ fun SettingsScreen(
     val isGapless by preferencesManager.gaplessFlow.collectAsState(initial = true)
     val isAutoplay by preferencesManager.autoplayFlow.collectAsState(initial = true)
 
+    val glassIntensity by preferencesManager.glassIntensityFlow.collectAsState(initial = 0.75f)
+
     var editingUrl by remember(backendUrl) { mutableStateOf(backendUrl) }
     var connectionStatus by remember { mutableStateOf<String?>(null) }
     var isCheckingConnection by remember { mutableStateOf(false) }
+
+    val glassConfig = LocalGlassConfig.current
 
     Column(
         modifier = modifier
@@ -66,12 +70,12 @@ fun SettingsScreen(
                         Text(
                             text = "Theme Palette",
                             style = GlassTypography.titleMedium,
-                            color = GlassTextPrimary
+                            color = glassConfig.textPrimary
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             GlassChip(
-                                text = "Light Glass (Default)",
+                                text = "Light Glass",
                                 isSelected = themeMode == "light_glass",
                                 onClick = {
                                     coroutineScope.launch {
@@ -96,6 +100,109 @@ fun SettingsScreen(
                                         preferencesManager.setThemeMode("dark_glass")
                                     }
                                 }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Glassroom Intensity Feature (Seberapa Kaca / Transparan)
+                        val intensityPercent = (glassIntensity * 100).toInt()
+                        val intensityLabel = when {
+                            glassIntensity < 0.45f -> "Ultra Crystal (Sangat Bening)"
+                            glassIntensity < 0.82f -> "Frosted Glass (Kaca Buram Elegan)"
+                            else -> "Milky Glass (Kaca Pekat)"
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Glassroom Translucency",
+                                style = GlassTypography.titleMedium,
+                                color = glassConfig.textPrimary
+                            )
+                            Text(
+                                text = "$intensityPercent% • $intensityLabel",
+                                style = GlassTypography.labelSmall,
+                                color = GlassAccentCobalt,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        androidx.compose.material3.Slider(
+                            value = glassIntensity,
+                            onValueChange = { newVal ->
+                                coroutineScope.launch {
+                                    preferencesManager.setGlassIntensity(newVal)
+                                }
+                            },
+                            valueRange = 0.25f..0.95f,
+                            colors = androidx.compose.material3.SliderDefaults.colors(
+                                thumbColor = if (glassConfig.isDark) Color.White else Color(0xFF2C3E50),
+                                activeTrackColor = if (glassConfig.isDark) Color.White else Color(0xFF2C3E50),
+                                inactiveTrackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x260F172A)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Quick Presets
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GlassChip(
+                                text = "💎 Crystal (35%)",
+                                isSelected = (glassIntensity - 0.35f).let { kotlin.math.abs(it) < 0.05f },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        preferencesManager.setGlassIntensity(0.35f)
+                                    }
+                                }
+                            )
+                            GlassChip(
+                                text = "❄️ Frosted (75%)",
+                                isSelected = (glassIntensity - 0.75f).let { kotlin.math.abs(it) < 0.05f },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        preferencesManager.setGlassIntensity(0.75f)
+                                    }
+                                }
+                            )
+                            GlassChip(
+                                text = "🥛 Milky (95%)",
+                                isSelected = (glassIntensity - 0.95f).let { kotlin.math.abs(it) < 0.05f },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        preferencesManager.setGlassIntensity(0.95f)
+                                    }
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Live Mini Preview inside card
+                        Text(
+                            text = "Live Glassroom Preview:",
+                            style = GlassTypography.labelSmall,
+                            color = glassConfig.textTertiary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(brush = glassConfig.cardBrush)
+                                .border(1.dp, glassConfig.borderHighlight, RoundedCornerShape(16.dp))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Kaca Glassroom: Transparan, halus, & berkedalaman",
+                                style = GlassTypography.bodyMedium,
+                                color = glassConfig.textPrimary
                             )
                         }
                     }

@@ -55,6 +55,8 @@ fun GlassMiniPlayer(
         }
     }
 
+    val glassConfig = LocalGlassConfig.current
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -62,21 +64,14 @@ fun GlassMiniPlayer(
             .shadow(
                 elevation = 14.dp,
                 shape = RoundedCornerShape(26.dp),
-                ambientColor = Color(0x1F0F172A),
-                spotColor = Color(0x140F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1F0F172A),
+                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x140F172A)
             )
             .clip(RoundedCornerShape(26.dp))
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xF7FFFFFF),
-                        Color(0xE6FFFFFF)
-                    )
-                )
-            )
+            .background(brush = glassConfig.miniPlayerBrush)
             .border(
                 width = 1.dp,
-                color = GlassBorderHighlight,
+                color = glassConfig.borderHighlight,
                 shape = RoundedCornerShape(26.dp)
             )
             .draggable(
@@ -118,7 +113,7 @@ fun GlassMiniPlayer(
                     Text(
                         text = track.title,
                         style = GlassTypography.titleMedium,
-                        color = GlassTextPrimary,
+                        color = glassConfig.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -126,7 +121,7 @@ fun GlassMiniPlayer(
                     Text(
                         text = track.artist,
                         style = GlassTypography.bodyMedium,
-                        color = GlassTextSecondary,
+                        color = glassConfig.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
