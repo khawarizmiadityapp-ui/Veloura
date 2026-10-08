@@ -1,6 +1,6 @@
-# 🚀 Panduan Deploy Backend Glassroom ke Cloud Gratis (Render.com)
+# 🚀 Panduan Deploy Backend Veloura ke Cloud Gratis (Render.com)
 
-Ikuti langkah cepat ini agar aplikasi **Glassroom** di HP kamu bisa digunakan **tanpa perlu menyalakan laptop sama sekali**:
+Ikuti langkah cepat ini agar aplikasi **Veloura** di HP kamu bisa digunakan **tanpa perlu menyalakan laptop sama sekali**:
 
 ---
 
@@ -15,7 +15,7 @@ Pastikan folder `backend/` sudah ter-upload ke repositori GitHub kamu (bisa publ
 3. Pilih opsi **Build and deploy from a Git repository**.
 4. Cari dan pilih repositori GitHub proyek ini.
 5. Isi formulir singkat:
-   - **Name**: `glassroom-backend` (atau nama pilihanmu)
+   - **Name**: `veloura-backend` (atau nama pilihanmu)
    - **Root Directory**: `backend`
    - **Environment / Runtime**: `Python 3`
    - **Build Command**: `pip install -r requirements.txt`
@@ -29,12 +29,12 @@ Tunggu sekitar 1–2 menit sampai statusnya berubah menjadi **Live** (berwarna h
 
 ### Langkah 3: Salin URL dan Tempel ke Aplikasi di HP
 1. Di halaman Render, salin URL websitemu, contoh:
-   `https://glassroom-backend.onrender.com`
-2. Buka aplikasi **Glassroom** di HP Android kamu.
+   `https://veloura-backend.onrender.com`
+2. Buka aplikasi **Veloura** di HP Android kamu.
 3. Masuk ke menu **Settings** (ikon gerigi di kanan bawah).
 4. Di bagian **Audio Backend API URL**, ganti alamatnya dengan URL Render kamu.
 5. Klik **Test Connection**.
-   *(Status akan berubah menjadi: "Connected to Glassroom Backend")*
+   *(Status akan berubah menjadi: "Connected to Veloura Backend")*
 
 ---
 
