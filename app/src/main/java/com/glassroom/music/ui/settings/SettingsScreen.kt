@@ -292,7 +292,7 @@ fun SettingsScreen(
                                         try {
                                             val health = NetworkClient.getApiService().healthCheck()
                                             if (health.isSuccessful) {
-                                                connectionStatus = "Connected to Glassroom Backend"
+                                                connectionStatus = "Connected to Veloura Backend"
                                             } else {
                                                 connectionStatus = "Server responded with error"
                                             }

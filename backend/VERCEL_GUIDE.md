@@ -10,6 +10,7 @@ Konfigurasi Vercel sudah disiapkan di folder `backend/`:
 
 ---
 
+
 ### Langkah 1: Push / Upload Perubahan ke GitHub
 Pastikan file terbaru di folder `backend/` sudah kamu push ke repositori GitHub:
 ```bash

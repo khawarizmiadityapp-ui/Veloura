@@ -141,6 +141,10 @@ def extract_stream_url(video_id):
     return None
 
 @app.route("/", methods=["GET"])
+@app.route("/api", methods=["GET"])
+@app.route("/api/", methods=["GET"])
+@app.route("/api/index", methods=["GET"])
+@app.route("/api/index.py", methods=["GET"])
 def root():
     return jsonify({
         "status": "online",
@@ -156,6 +160,7 @@ def root():
     })
 
 @app.route("/api/health", methods=["GET"])
+@app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "status": "online",
@@ -163,7 +168,33 @@ def health():
         "version": "1.0.0"
     })
 
+@app.errorhandler(404)
+def handle_not_found(e):
+    path = request.path or ""
+    norm = path.strip("/")
+    if norm in ["", "api", "api/index", "api/index.py"]:
+        return root()
+    if "health" in norm:
+        return health()
+    if "recommendations" in norm:
+        return recommendations()
+    if "search" in norm:
+        return search()
+    return jsonify({
+        "status": "error",
+        "code": 404,
+        "message": f"Endpoint not found: {request.path}",
+        "method": request.method,
+        "available_endpoints": [
+            "/api/health",
+            "/api/search?q={query}",
+            "/api/recommendations",
+            "/api/stream/{track_id}"
+        ]
+    }), 404
+
 @app.route("/api/search", methods=["GET"])
+@app.route("/search", methods=["GET"])
 def search():
     query = request.args.get("q", "").strip()
     category = request.args.get("category", "songs").lower()
@@ -194,6 +225,7 @@ def search():
         return jsonify({"tracks": CURATED_TRACKS[:4], "artists": [], "albums": []})
 
 @app.route("/api/track/<track_id>", methods=["GET"])
+@app.route("/track/<track_id>", methods=["GET"])
 def get_track(track_id):
     # Check curated first
     for t in CURATED_TRACKS:
@@ -225,8 +257,8 @@ def get_track(track_id):
     return jsonify({
         "id": track_id,
         "title": f"Track {track_id}",
-        "artist": "Glassroom Artist",
-        "album": "Glassroom Session",
+        "artist": "Veloura Artist",
+        "album": "Veloura Session",
         "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
         "duration": 210,
         "streamUrl": f"/api/stream/{track_id}",
@@ -234,6 +266,7 @@ def get_track(track_id):
     })
 
 @app.route("/api/stream/<track_id>", methods=["GET"])
+@app.route("/stream/<track_id>", methods=["GET"])
 def get_stream(track_id):
     # Check curated tracks
     for t in CURATED_TRACKS:
@@ -263,6 +296,7 @@ def get_stream(track_id):
     })
 
 @app.route("/api/recommendations", methods=["GET"])
+@app.route("/recommendations", methods=["GET"])
 def recommendations():
     return jsonify({
         "popular": CURATED_TRACKS,
@@ -339,6 +373,7 @@ def scrape_spotify_playlist(playlist_url_or_id):
     }
 
 @app.route("/api/spotify/import", methods=["POST"])
+@app.route("/spotify/import", methods=["POST"])
 def spotify_import():
     body = request.get_json(force=True, silent=True) or {}
     url = body.get("url", "").strip()
