@@ -10,6 +10,30 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+class VercelRouteMiddleware:
+    """Restores the original requested URL path when running under Vercel serverless rewrites."""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        query_string = environ.get("QUERY_STRING", "")
+        if "__route__=" in query_string:
+            params = urllib.parse.parse_qs(query_string)
+            if "__route__" in params and params["__route__"]:
+                route = params["__route__"][0]
+                if not route.startswith("/"):
+                    route = "/" + route
+                environ["PATH_INFO"] = route
+                params.pop("__route__", None)
+                environ["QUERY_STRING"] = urllib.parse.urlencode(params, doseq=True)
+        elif environ.get("HTTP_X_FORWARDED_URI"):
+            uri = environ["HTTP_X_FORWARDED_URI"].split("?")[0]
+            environ["PATH_INFO"] = uri
+
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelRouteMiddleware(app.wsgi_app)
+
 PORT = int(os.environ.get("PORT", 5000))
 
 # Fallback curated data for instant responsiveness & resilience
