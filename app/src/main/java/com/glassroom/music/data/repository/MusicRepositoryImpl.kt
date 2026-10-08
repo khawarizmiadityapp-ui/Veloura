@@ -18,66 +18,66 @@ class MusicRepositoryImpl(
     private val localDataSource: LocalDataSource
 ) : MusicRepository {
 
-    // Curated fallback tracks for high resilience
+    // Curated fallback tracks with real YouTube IDs
     private val defaultCuratedTracks = listOf(
         Track(
-            id = "track_1",
+            id = "34Na4j8AVgA",
             title = "Starboy",
             artist = "The Weeknd ft. Daft Punk",
             album = "Starboy",
-            thumbnail = "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg",
             duration = 230,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3",
+            streamUrl = "/api/stream/34Na4j8AVgA",
             source = "youtube"
         ),
         Track(
-            id = "track_2",
+            id = "4NRXx6U8ABQ",
             title = "Blinding Lights",
             artist = "The Weeknd",
             album = "After Hours",
-            thumbnail = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg",
             duration = 200,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3",
+            streamUrl = "/api/stream/4NRXx6U8ABQ",
             source = "youtube"
         ),
         Track(
-            id = "track_3",
+            id = "dX3k_QDnzHE",
             title = "Midnight City",
             artist = "M83",
             album = "Hurry Up, We're Dreaming",
-            thumbnail = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/dX3k_QDnzHE/hqdefault.jpg",
             duration = 243,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg",
+            streamUrl = "/api/stream/dX3k_QDnzHE",
             source = "youtube"
         ),
         Track(
-            id = "track_4",
+            id = "H5v3kku4y6Q",
             title = "As It Was",
             artist = "Harry Styles",
             album = "Harry's House",
-            thumbnail = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg",
             duration = 167,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-demos/pyman_assets/ateapill.ogg",
+            streamUrl = "/api/stream/H5v3kku4y6Q",
             source = "youtube"
         ),
         Track(
-            id = "track_5",
+            id = "5NV6Rdv1a3I",
             title = "Get Lucky",
             artist = "Daft Punk ft. Pharrell Williams",
             album = "Random Access Memories",
-            thumbnail = "https://images.unsplash.com/photo-1445985543470-41fba5c3144a?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/5NV6Rdv1a3I/hqdefault.jpg",
             duration = 248,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3",
+            streamUrl = "/api/stream/5NV6Rdv1a3I",
             source = "youtube"
         ),
         Track(
-            id = "track_6",
+            id = "TUVcZfQe-Kw",
             title = "Levitating",
             artist = "Dua Lipa",
             album = "Future Nostalgia",
-            thumbnail = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+            thumbnail = "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
             duration = 203,
-            streamUrl = "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3",
+            streamUrl = "/api/stream/TUVcZfQe-Kw",
             source = "youtube"
         )
     )
@@ -144,11 +144,21 @@ class MusicRepositoryImpl(
                 Result.success(url)
             } else {
                 val found = defaultCuratedTracks.firstOrNull { it.id == trackId }
-                Result.success(found?.streamUrl ?: defaultCuratedTracks.first().streamUrl)
+                val fallbackUrl = found?.streamUrl ?: "/api/stream/$trackId"
+                val fullUrl = if (fallbackUrl.startsWith("/")) {
+                    val base = NetworkClient.getBaseUrl().removeSuffix("/")
+                    "$base$fallbackUrl"
+                } else fallbackUrl
+                Result.success(fullUrl)
             }
         } catch (e: Exception) {
             val found = defaultCuratedTracks.firstOrNull { it.id == trackId }
-            Result.success(found?.streamUrl ?: defaultCuratedTracks.first().streamUrl)
+            val fallbackUrl = found?.streamUrl ?: "/api/stream/$trackId"
+            val fullUrl = if (fallbackUrl.startsWith("/")) {
+                val base = NetworkClient.getBaseUrl().removeSuffix("/")
+                "$base$fallbackUrl"
+            } else fallbackUrl
+            Result.success(fullUrl)
         }
     }
 

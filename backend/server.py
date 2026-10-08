@@ -2,8 +2,10 @@ import json
 import os
 import re
 import subprocess
+import time
 import urllib.parse
 import urllib.request
+import yt_dlp
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
@@ -36,132 +38,231 @@ app.wsgi_app = VercelRouteMiddleware(app.wsgi_app)
 
 PORT = int(os.environ.get("PORT", 5000))
 
-# Fallback curated data for instant responsiveness & resilience
+# Legacy ID map for backward compatibility with cached client data
+LEGACY_ID_MAP = {
+    "track_1": "34Na4j8AVgA",
+    "track_2": "4NRXx6U8ABQ",
+    "track_3": "dX3k_QDnzHE",
+    "track_4": "H5v3kku4y6Q",
+    "track_5": "5NV6Rdv1a3I",
+    "track_6": "TUVcZfQe-Kw"
+}
+
+# Curated tracks with REAL YouTube video IDs matching the actual songs
 CURATED_TRACKS = [
     {
-        "id": "track_1",
+        "id": "34Na4j8AVgA",
         "title": "Starboy",
         "artist": "The Weeknd ft. Daft Punk",
         "album": "Starboy",
-        "thumbnail": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg",
         "duration": 230,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3",
+        "streamUrl": "/api/stream/34Na4j8AVgA",
         "source": "youtube"
     },
     {
-        "id": "track_2",
+        "id": "4NRXx6U8ABQ",
         "title": "Blinding Lights",
         "artist": "The Weeknd",
         "album": "After Hours",
-        "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg",
         "duration": 200,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3",
+        "streamUrl": "/api/stream/4NRXx6U8ABQ",
         "source": "youtube"
     },
     {
-        "id": "track_3",
+        "id": "dX3k_QDnzHE",
         "title": "Midnight City",
         "artist": "M83",
         "album": "Hurry Up, We're Dreaming",
-        "thumbnail": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/dX3k_QDnzHE/hqdefault.jpg",
         "duration": 243,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg",
+        "streamUrl": "/api/stream/dX3k_QDnzHE",
         "source": "youtube"
     },
     {
-        "id": "track_4",
+        "id": "H5v3kku4y6Q",
         "title": "As It Was",
         "artist": "Harry Styles",
         "album": "Harry's House",
-        "thumbnail": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg",
         "duration": 167,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-demos/pyman_assets/ateapill.ogg",
+        "streamUrl": "/api/stream/H5v3kku4y6Q",
         "source": "youtube"
     },
     {
-        "id": "track_5",
+        "id": "5NV6Rdv1a3I",
         "title": "Get Lucky",
         "artist": "Daft Punk ft. Pharrell Williams",
         "album": "Random Access Memories",
-        "thumbnail": "https://images.unsplash.com/photo-1445985543470-41fba5c3144a?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/5NV6Rdv1a3I/hqdefault.jpg",
         "duration": 248,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3",
+        "streamUrl": "/api/stream/5NV6Rdv1a3I",
         "source": "youtube"
     },
     {
-        "id": "track_6",
+        "id": "TUVcZfQe-Kw",
         "title": "Levitating",
         "artist": "Dua Lipa",
         "album": "Future Nostalgia",
-        "thumbnail": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
         "duration": 203,
-        "streamUrl": "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3",
+        "streamUrl": "/api/stream/TUVcZfQe-Kw",
         "source": "youtube"
     }
 ]
 
-def run_ytdlp(args, timeout=25):
-    """Executes yt-dlp safely and returns JSON or stdout."""
-    cmd = ["yt-dlp", "--no-warnings", "--no-check-certificates", "--prefer-free-formats"] + args
-    try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
-        return result.stdout.strip()
-    except Exception as e:
-        print(f"Error running yt-dlp: {e}")
-        return None
+STREAM_CACHE = {}
 
-def ytdlp_search(query, limit=12):
-    """Searches YouTube using yt-dlp."""
-    args = [
-        f"ytsearch{limit}:{query}",
-        "--dump-single-json",
-        "--flat-playlist",
-        "--default-search", "ytsearch",
-        "--skip-download"
-    ]
-    raw = run_ytdlp(args, timeout=20)
-    if not raw:
-        return []
+def parse_duration_seconds(dur_str):
+    if not dur_str:
+        return 0
+    parts = dur_str.replace('.', ':').split(':')
     try:
-        data = json.loads(raw)
-        entries = data.get("entries", [])
-        tracks = []
-        for item in entries:
-            if not item:
-                continue
-            video_id = item.get("id") or item.get("url")
-            title = item.get("title", "Unknown Title")
-            uploader = item.get("uploader") or item.get("channel") or "Unknown Artist"
-            duration = item.get("duration") or 0
-            thumbnails = item.get("thumbnails", [])
-            thumb = thumbnails[-1].get("url") if thumbnails else f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-            
-            tracks.append({
-                "id": str(video_id),
-                "title": title,
-                "artist": uploader,
-                "album": "YouTube Audio",
-                "thumbnail": thumb,
-                "duration": int(duration),
-                "streamUrl": f"/api/stream/{video_id}",
-                "source": "youtube"
-            })
-        return tracks
-    except Exception as ex:
-        print(f"Parse error in ytdlp_search: {ex}")
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        return int(parts[0])
+    except Exception:
+        return 0
+
+def scrape_youtube_search(query, limit=12):
+    """Fast, accurate YouTube search parser without CLI dependencies."""
+    url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+        match = re.search(r'var ytInitialData\s*=\s*({.+?});</script>', html)
+        if not match:
+            return []
+        data = json.loads(match.group(1))
+        contents = data.get("contents", {}).get("twoColumnSearchResultsRenderer", {}).get("primaryContents", {}).get("sectionListRenderer", {}).get("contents", [])
+        results = []
+        for section in contents:
+            items = section.get("itemSectionRenderer", {}).get("contents", [])
+            for item in items:
+                vr = item.get("videoRenderer")
+                if vr:
+                    vid = vr.get("videoId")
+                    if not vid:
+                        continue
+                    title = vr.get("title", {}).get("runs", [{}])[0].get("text", "Unknown Title")
+                    channel = vr.get("ownerText", {}).get("runs", [{}])[0].get("text", "YouTube Artist")
+                    dur_text = vr.get("lengthText", {}).get("simpleText", "0:00")
+                    thumbnails = vr.get("thumbnail", {}).get("thumbnails", [])
+                    thumb = thumbnails[-1].get("url") if thumbnails else f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+                    
+                    results.append({
+                        "id": str(vid),
+                        "title": title,
+                        "artist": channel,
+                        "album": "YouTube Audio",
+                        "thumbnail": thumb,
+                        "duration": parse_duration_seconds(dur_text),
+                        "streamUrl": f"/api/stream/{vid}",
+                        "source": "youtube"
+                    })
+                    if len(results) >= limit:
+                        return results
+        return results
+    except Exception as e:
+        print(f"Scrape search error: {e}")
         return []
+
+def ytdlp_search_module(query, limit=12):
+    """Fallback search using yt_dlp Python library."""
+    try:
+        ydl_opts = {
+            "quiet": True,
+            "extract_flat": True,
+            "skip_download": True,
+            "no_warnings": True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            res = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+            entries = res.get("entries", [])
+            tracks = []
+            for item in entries:
+                if not item:
+                    continue
+                vid = item.get("id") or item.get("url")
+                tracks.append({
+                    "id": str(vid),
+                    "title": item.get("title", "Unknown Title"),
+                    "artist": item.get("uploader") or item.get("channel") or "Unknown Artist",
+                    "album": "YouTube Audio",
+                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                    "duration": int(item.get("duration") or 0),
+                    "streamUrl": f"/api/stream/{vid}",
+                    "source": "youtube"
+                })
+            return tracks
+    except Exception as e:
+        print(f"yt_dlp search error: {e}")
+        return []
+
+def search_tracks(query, limit=12):
+    """Executes high-speed search with multiple fallbacks."""
+    tracks = scrape_youtube_search(query, limit=limit)
+    if not tracks:
+        tracks = ytdlp_search_module(query, limit=limit)
+    if not tracks:
+        matched = [
+            t for t in CURATED_TRACKS 
+            if query.lower() in t["title"].lower() or query.lower() in t["artist"].lower()
+        ]
+        tracks = matched if matched else CURATED_TRACKS
+    return tracks
 
 def extract_stream_url(video_id):
-    """Extracts direct audio stream URL using yt-dlp."""
-    args = [
-        f"https://www.youtube.com/watch?v={video_id}",
-        "-f", "bestaudio[ext=m4a]/bestaudio/best",
-        "-g"
-    ]
-    url = run_ytdlp(args, timeout=25)
-    if url and url.startswith("http"):
-        # Take the first line if multiple URLs returned
-        return url.splitlines()[0].strip()
+    """Extracts direct audio stream URL using yt_dlp Python library with multiple player clients."""
+    clean_id = LEGACY_ID_MAP.get(video_id, video_id)
+    now = time.time()
+    
+    # Check cache
+    if clean_id in STREAM_CACHE and (now - STREAM_CACHE[clean_id]["time"] < 7200):
+        return STREAM_CACHE[clean_id]["url"]
+
+    # Attempt 1: android_vr & ios clients for direct audio without bot block
+    ydl_opts = {
+        "quiet": True,
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "skip_download": True,
+        "no_warnings": True,
+        "extractor_args": {"youtube": {"player_client": ["android_vr", "ios", "web"]}}
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
+            url = info.get("url")
+            if url and url.startswith("http"):
+                STREAM_CACHE[clean_id] = {"url": url, "time": now}
+                return url
+    except Exception as e:
+        print(f"extract_stream_url error: {e}")
+
+    # Attempt 2: fallback to any audio format
+    try:
+        ydl_opts2 = {
+            "quiet": True,
+            "format": "ba/b",
+            "skip_download": True,
+            "no_warnings": True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts2) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
+            url = info.get("url")
+            if url and url.startswith("http"):
+                STREAM_CACHE[clean_id] = {"url": url, "time": now}
+                return url
+    except Exception as ex:
+        print(f"extract_stream_url retry error: {ex}")
+
     return None
 
 @app.route("/", methods=["GET"])
@@ -227,17 +328,9 @@ def search():
         return jsonify({"tracks": [], "artists": [], "albums": []})
         
     try:
-        tracks = ytdlp_search(query, limit=12)
-        if not tracks:
-            # Filter curated tracks as fallback
-            matched = [
-                t for t in CURATED_TRACKS 
-                if query.lower() in t["title"].lower() or query.lower() in t["artist"].lower()
-            ]
-            tracks = matched if matched else CURATED_TRACKS[:4]
-            
-        artists = list({t["artist"] for t in tracks})
-        albums = list({t["album"] for t in tracks})
+        tracks = search_tracks(query, limit=12)
+        artists = list({t["artist"] for t in tracks if t.get("artist")})
+        albums = list({t["album"] for t in tracks if t.get("album")})
         
         return jsonify({
             "tracks": tracks,
@@ -246,63 +339,61 @@ def search():
         })
     except Exception as e:
         print(f"Search error: {e}")
-        return jsonify({"tracks": CURATED_TRACKS[:4], "artists": [], "albums": []})
+        return jsonify({"tracks": CURATED_TRACKS, "artists": [], "albums": []})
 
-@app.route("/api/track/<track_id>", methods=["GET"])
-@app.route("/track/<track_id>", methods=["GET"])
+@app.route("/api/track/<path:track_id>", methods=["GET"])
+@app.route("/track/<path:track_id>", methods=["GET"])
 def get_track(track_id):
+    clean_id = LEGACY_ID_MAP.get(track_id, track_id)
     # Check curated first
     for t in CURATED_TRACKS:
-        if t["id"] == track_id:
+        if t["id"] == clean_id or t["id"] == track_id:
             return jsonify(t)
             
-    args = [
-        f"https://www.youtube.com/watch?v={track_id}",
-        "--dump-single-json",
-        "--skip-download"
-    ]
-    raw = run_ytdlp(args, timeout=20)
-    if raw:
-        try:
-            info = json.loads(raw)
-            return jsonify({
-                "id": str(track_id),
-                "title": info.get("title", "Unknown Title"),
-                "artist": info.get("uploader", "Unknown Artist"),
-                "album": info.get("album") or "Single",
-                "thumbnail": info.get("thumbnail") or f"https://i.ytimg.com/vi/{track_id}/hqdefault.jpg",
-                "duration": int(info.get("duration", 0)),
-                "streamUrl": f"/api/stream/{track_id}",
-                "source": "youtube"
-            })
-        except Exception:
-            pass
+    try:
+        ydl_opts = {
+            "quiet": True,
+            "extract_flat": True,
+            "skip_download": True,
+            "no_warnings": True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
+            if info:
+                return jsonify({
+                    "id": str(clean_id),
+                    "title": info.get("title", f"Track {clean_id}"),
+                    "artist": info.get("uploader") or info.get("channel") or "Unknown Artist",
+                    "album": "YouTube Audio",
+                    "thumbnail": info.get("thumbnail") or f"https://i.ytimg.com/vi/{clean_id}/hqdefault.jpg",
+                    "duration": int(info.get("duration") or 0),
+                    "streamUrl": f"/api/stream/{clean_id}",
+                    "source": "youtube"
+                })
+    except Exception:
+        pass
 
     return jsonify({
         "id": track_id,
         "title": f"Track {track_id}",
         "artist": "Veloura Artist",
         "album": "Veloura Session",
-        "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+        "thumbnail": f"https://i.ytimg.com/vi/{clean_id}/hqdefault.jpg",
         "duration": 210,
-        "streamUrl": f"/api/stream/{track_id}",
+        "streamUrl": f"/api/stream/{clean_id}",
         "source": "youtube"
     })
 
-@app.route("/api/stream/<track_id>", methods=["GET"])
-@app.route("/stream/<track_id>", methods=["GET"])
+@app.route("/api/stream/<path:track_id>", methods=["GET"])
+@app.route("/stream/<path:track_id>", methods=["GET"])
 def get_stream(track_id):
-    # Check curated tracks
-    for t in CURATED_TRACKS:
-        if t["id"] == track_id:
-            return jsonify({
-                "id": track_id,
-                "streamUrl": t["streamUrl"],
-                "format": "mp3",
-                "source": "curated"
-            })
-            
-    stream_url = extract_stream_url(track_id)
+    clean_id = LEGACY_ID_MAP.get(track_id, track_id)
+    if clean_id.startswith("api/stream/"):
+        clean_id = clean_id.replace("api/stream/", "")
+    elif clean_id.startswith("stream/"):
+        clean_id = clean_id.replace("stream/", "")
+        
+    stream_url = extract_stream_url(clean_id)
     if stream_url:
         return jsonify({
             "id": track_id,
@@ -311,13 +402,10 @@ def get_stream(track_id):
             "source": "youtube"
         })
         
-    # Return default reliable audio demo if ytdlp failed
     return jsonify({
-        "id": track_id,
-        "streamUrl": CURATED_TRACKS[0]["streamUrl"],
-        "format": "mp3",
-        "source": "fallback"
-    })
+        "error": "Audio stream not found",
+        "id": track_id
+    }), 404
 
 @app.route("/api/recommendations", methods=["GET"])
 @app.route("/recommendations", methods=["GET"])

@@ -7,7 +7,6 @@ Konfigurasi Vercel sudah disiapkan di folder `backend/`:
 - `api/index.py`
 - `requirements.txt`
 - `server.py`
-
 ---
 
 

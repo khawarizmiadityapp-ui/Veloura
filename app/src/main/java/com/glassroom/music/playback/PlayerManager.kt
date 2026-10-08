@@ -179,11 +179,21 @@ class PlayerManager(
             playlistRepository.addToRecentlyPlayed(track)
 
             // Resolve direct stream URL via repository/backend
-            val resolvedUrl = if (track.streamUrl.isNotBlank() && track.streamUrl.startsWith("http")) {
+            val isDirectCdn = track.streamUrl.isNotBlank() &&
+                    track.streamUrl.startsWith("http") &&
+                    !track.streamUrl.contains("/api/stream") &&
+                    !track.streamUrl.contains("commondatastorage.googleapis.com")
+
+            val resolvedUrl = if (isDirectCdn) {
                 track.streamUrl
             } else {
                 val res = musicRepository.resolveStreamUrl(track.id)
-                res.getOrNull() ?: track.streamUrl
+                val direct = res.getOrNull()
+                if (!direct.isNullOrBlank() && direct.startsWith("http") && !direct.contains("/api/stream")) {
+                    direct
+                } else {
+                    track.streamUrl
+                }
             }
 
             if (resolvedUrl.isBlank()) {
