@@ -229,15 +229,15 @@ def extract_stream_url(video_id):
         return STREAM_CACHE[clean_id]["url"], None
 
     last_err = ""
-    # Attempt 1: android_vr & ios clients for direct audio without bot block
-    ydl_opts = {
-        "quiet": True,
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
-        "skip_download": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "ios", "web"]}}
-    }
+    # Attempt 1: web_safari client
     try:
+        ydl_opts = {
+            "quiet": True,
+            "format": "bestaudio/best",
+            "skip_download": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["web_safari"]}}
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
@@ -245,26 +245,25 @@ def extract_stream_url(video_id):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as e:
-        last_err = str(e)
-        print(f"extract_stream_url error: {e}")
+        last_err = f"web_safari: {e}"
 
-    # Attempt 2: fallback to any audio format
+    # Attempt 2: tv & mweb client
     try:
-        ydl_opts2 = {
+        ydl_opts_tv = {
             "quiet": True,
-            "format": "ba/b",
+            "format": "bestaudio/best",
             "skip_download": True,
-            "no_warnings": True
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["tv", "mweb"]}}
         }
-        with yt_dlp.YoutubeDL(ydl_opts2) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_tv) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as ex:
-        last_err += " | " + str(ex)
-        print(f"extract_stream_url retry error: {ex}")
+        last_err += f" | tv: {ex}"
 
     return None, last_err
 
