@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.glassroom.music.ui.theme.LocalGlassConfig
@@ -22,14 +23,15 @@ fun GlassCard(
     shape: Shape = RoundedCornerShape(24.dp),
     backgroundBrush: Brush? = null,
     borderColor: Color? = null,
+    borderBrush: Brush? = null,
     borderWidth: Dp = 1.dp,
-    elevation: Dp = 6.dp,
+    elevation: Dp = 4.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val glassConfig = LocalGlassConfig.current
     val effectiveBrush = backgroundBrush ?: glassConfig.cardBrush
-    val effectiveBorder = borderColor ?: glassConfig.borderHighlight
+    val effectiveBorderBrush = borderBrush ?: if (borderColor != null) SolidColor(borderColor) else glassConfig.borderBrush
 
     val clickModifier = if (onClick != null) {
         Modifier.clickable(onClick = onClick)
@@ -42,14 +44,14 @@ fun GlassCard(
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A),
-                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x140F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A),
+                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0A0F172A)
             )
             .clip(shape)
             .background(brush = effectiveBrush, shape = shape)
             .border(
                 width = borderWidth,
-                color = effectiveBorder,
+                brush = effectiveBorderBrush,
                 shape = shape
             )
             .then(clickModifier)

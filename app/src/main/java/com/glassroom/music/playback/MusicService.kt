@@ -80,10 +80,10 @@ class MusicService : MediaSessionService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "Glassroom Playback",
+                "Veloura Playback",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows currently playing song in Glassroom"
+                description = "Shows currently playing song in Veloura"
                 setShowBadge(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }

@@ -71,7 +71,7 @@ fun GlassMiniPlayer(
             .background(brush = glassConfig.miniPlayerBrush)
             .border(
                 width = 1.dp,
-                color = glassConfig.borderHighlight,
+                brush = glassConfig.borderBrush,
                 shape = RoundedCornerShape(26.dp)
             )
             .draggable(

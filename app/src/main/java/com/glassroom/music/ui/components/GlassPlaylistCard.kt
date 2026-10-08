@@ -40,17 +40,18 @@ fun GlassPlaylistCard(
             .padding(4.dp)
     ) {
         // Square Artwork with frosted border and Spotify Import badge
+        val glassConfig = LocalGlassConfig.current
         Box(
             modifier = Modifier
                 .size(size)
                 .shadow(
                     elevation = 8.dp,
                     shape = RoundedCornerShape(20.dp),
-                    ambientColor = Color(0x1A0F172A)
+                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A)
                 )
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFFE2E8F0))
-                .border(width = 1.dp, color = GlassBorderHighlight, shape = RoundedCornerShape(20.dp))
+                .background(if (glassConfig.isDark) Color(0xFF1E2430) else Color(0xFFE2E8F0))
+                .border(width = 1.dp, brush = glassConfig.borderBrush, shape = RoundedCornerShape(20.dp))
         ) {
             if (playlist.artwork.isNotBlank()) {
                 AsyncImage(

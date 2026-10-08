@@ -87,24 +87,43 @@ data class GlassConfig(
         get() {
             val factor = intensity.coerceIn(0.2f, 1.0f)
             return if (isDark) {
-                val topAlpha = (factor * 0.42f).coerceIn(0.12f, 0.65f)
-                val bottomAlpha = (factor * 0.22f).coerceIn(0.06f, 0.45f)
+                val topAlpha = (factor * 0.52f).coerceIn(0.20f, 0.62f)
+                val bottomAlpha = (factor * 0.32f).coerceIn(0.10f, 0.42f)
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = topAlpha),
-                        Color.White.copy(alpha = bottomAlpha)
+                        Color(0xFF1E2638).copy(alpha = topAlpha),
+                        Color(0xFF0D121C).copy(alpha = bottomAlpha)
                     )
                 )
             } else {
-                val topAlpha = (factor * 0.94f).coerceIn(0.35f, 0.98f)
-                val bottomAlpha = (factor * 0.65f).coerceIn(0.18f, 0.90f)
+                val topAlpha = (factor * 0.70f).coerceIn(0.30f, 0.78f)
+                val bottomAlpha = (factor * 0.42f).coerceIn(0.18f, 0.50f)
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = topAlpha),
-                        Color.White.copy(alpha = bottomAlpha)
+                        Color(0xFFFFFFFF).copy(alpha = topAlpha),
+                        Color(0xFFF1F5F9).copy(alpha = bottomAlpha)
                     )
                 )
             }
+        }
+
+    val borderBrush: Brush
+        get() = if (isDark) {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.32f),
+                    Color.White.copy(alpha = 0.10f),
+                    Color(0xFF000000).copy(alpha = 0.25f)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.88f),
+                    Color.White.copy(alpha = 0.40f),
+                    Color(0xFFCBD5E1).copy(alpha = 0.25f)
+                )
+            )
         }
 
     val backgroundBrush: Brush
@@ -131,15 +150,15 @@ data class GlassConfig(
             return if (isDark) {
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF1E2430).copy(alpha = (factor * 0.95f).coerceIn(0.5f, 0.98f)),
-                        Color(0xFF131720).copy(alpha = (factor * 0.85f).coerceIn(0.4f, 0.95f))
+                        Color(0xFF1B2230).copy(alpha = (factor * 0.82f).coerceIn(0.45f, 0.88f)),
+                        Color(0xFF0E131C).copy(alpha = (factor * 0.68f).coerceIn(0.35f, 0.78f))
                     )
                 )
             } else {
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = (factor * 0.98f).coerceIn(0.4f, 0.98f)),
-                        Color(0xFFF1F5F9).copy(alpha = (factor * 0.90f).coerceIn(0.3f, 0.95f))
+                        Color.White.copy(alpha = (factor * 0.82f).coerceIn(0.45f, 0.88f)),
+                        Color(0xFFF8FAFC).copy(alpha = (factor * 0.62f).coerceIn(0.32f, 0.72f))
                     )
                 )
             }

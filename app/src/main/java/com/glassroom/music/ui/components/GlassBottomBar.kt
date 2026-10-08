@@ -69,7 +69,7 @@ fun GlassBottomBar(
                 .background(brush = glassConfig.miniPlayerBrush)
                 .border(
                     width = 1.dp,
-                    color = glassConfig.borderHighlight,
+                    brush = glassConfig.borderBrush,
                     shape = RoundedCornerShape(32.dp)
                 )
                 .padding(horizontal = 8.dp, vertical = 8.dp)

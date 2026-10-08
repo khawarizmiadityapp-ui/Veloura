@@ -37,24 +37,39 @@ fun GlassButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(targetValue = if (isPressed) 0.96f else 1f, label = "button_press")
 
+    val glassConfig = LocalGlassConfig.current
+
     val bgBrush = if (isPrimary) {
-        Brush.horizontalGradient(
-            colors = listOf(
-                Color(0xFF2C3E50),
-                Color(0xFF34495E)
+        if (glassConfig.isDark) {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    GlassAccentCobalt,
+                    Color(0xFF2563EB)
+                )
+            )
+        } else {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    Color(0xFF1E293B),
+                    Color(0xFF0F172A)
+                )
+            )
+        }
+    } else {
+        glassConfig.cardBrush
+    }
+
+    val contentColor = if (isPrimary) Color.White else glassConfig.textPrimary
+    val borderBrush = if (isPrimary) {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.5f),
+                Color.White.copy(alpha = 0.15f)
             )
         )
     } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0xE6FFFFFF),
-                Color(0xB3FFFFFF)
-            )
-        )
+        glassConfig.borderBrush
     }
-
-    val contentColor = if (isPrimary) Color.White else GlassTextPrimary
-    val borderColor = if (isPrimary) Color(0x33FFFFFF) else GlassBorderHighlight
 
     Box(
         modifier = modifier
@@ -62,12 +77,12 @@ fun GlassButton(
             .shadow(
                 elevation = if (isPrimary) 8.dp else 4.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x140F172A),
-                spotColor = Color(0x0F0F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A),
+                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0F0F172A)
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = bgBrush)
-            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(20.dp))
+            .border(width = 1.dp, brush = borderBrush, shape = RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -104,11 +119,14 @@ fun GlassIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = GlassTextPrimary,
+    tint: Color? = null,
     size: Dp = 44.dp,
     iconSize: Dp = 20.dp,
-    backgroundBrush: Brush = GlassSurfaceCardGradient
+    backgroundBrush: Brush? = null
 ) {
+    val glassConfig = LocalGlassConfig.current
+    val effectiveTint = tint ?: glassConfig.textPrimary
+    val effectiveBg = backgroundBrush ?: glassConfig.cardBrush
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(targetValue = if (isPressed) 0.92f else 1f, label = "icon_press")
@@ -120,11 +138,11 @@ fun GlassIconButton(
             .shadow(
                 elevation = 4.dp,
                 shape = CircleShape,
-                ambientColor = Color(0x120F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A)
             )
             .clip(CircleShape)
-            .background(brush = backgroundBrush)
-            .border(width = 1.dp, color = GlassBorderWhite, shape = CircleShape)
+            .background(brush = effectiveBg)
+            .border(width = 1.dp, brush = glassConfig.borderBrush, shape = CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -135,7 +153,7 @@ fun GlassIconButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = effectiveTint,
             modifier = Modifier.size(iconSize)
         )
     }

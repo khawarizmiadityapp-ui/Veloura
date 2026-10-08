@@ -318,27 +318,69 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // About Glassroom Section
+            // About Veloura Section
             item {
                 SectionHeader(title = "About", modifier = Modifier.padding(horizontal = 0.dp))
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Glass Encapsulated Logo Showcase
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(brush = glassConfig.cardBrush)
+                                .border(
+                                    width = 1.dp,
+                                    brush = glassConfig.borderBrush,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = com.glassroom.music.R.drawable.logo_veloura),
+                                contentDescription = "Veloura Logo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         Text(
-                            text = "Glassroom Music Player",
-                            style = GlassTypography.headlineMedium,
-                            color = GlassTextPrimary
+                            text = "VELOURA",
+                            style = GlassTypography.headlineMedium.copy(
+                                letterSpacing = 3.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = glassConfig.textPrimary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Version 1.0.0 • White Transparent Glassroom",
+                            text = "FEEL EVERY FREQUENCY",
+                            style = GlassTypography.labelSmall.copy(
+                                letterSpacing = 1.5.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            ),
+                            color = GlassAccentCobalt
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Version 1.0.0 • Pure Glass Edition",
                             style = GlassTypography.labelSmall,
-                            color = GlassTextTertiary
+                            color = glassConfig.textTertiary
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Engineered with Kotlin, Jetpack Compose, Material 3, Android Media3 ExoPlayer, and YouTube audio resolution via backend yt-dlp.",
                             style = GlassTypography.bodyMedium,
-                            color = GlassTextSecondary
+                            color = glassConfig.textSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }

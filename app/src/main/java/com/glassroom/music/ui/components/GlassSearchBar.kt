@@ -72,13 +72,27 @@ fun GlassTopBar(
 
 @Composable
 fun GlassSearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
+    query: String = "",
+    onQueryChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     placeholder: String = "Search songs, artists, albums...",
+    readOnly: Boolean = false,
+    onClick: (() -> Unit)? = null,
     onSearch: () -> Unit = {}
 ) {
     val glassConfig = LocalGlassConfig.current
+
+    val clickModifier = if (onClick != null || readOnly) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) {
+            onClick?.invoke()
+        }
+    } else {
+        Modifier
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -92,9 +106,10 @@ fun GlassSearchBar(
             .background(brush = glassConfig.miniPlayerBrush)
             .border(
                 width = 1.dp,
-                color = glassConfig.borderHighlight,
+                brush = glassConfig.borderBrush,
                 shape = RoundedCornerShape(24.dp)
             )
+            .then(clickModifier)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
@@ -109,25 +124,33 @@ fun GlassSearchBar(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Box(modifier = Modifier.weight(1f)) {
-                if (query.isEmpty()) {
+                if (readOnly || onClick != null) {
                     Text(
                         text = placeholder,
                         style = GlassTypography.bodyLarge,
                         color = glassConfig.textTertiary
                     )
+                } else {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = GlassTypography.bodyLarge,
+                            color = glassConfig.textTertiary
+                        )
+                    }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        singleLine = true,
+                        textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                        cursorBrush = SolidColor(glassConfig.textPrimary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
-                    textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
-                    cursorBrush = SolidColor(glassConfig.textPrimary),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-            if (query.isNotEmpty()) {
+            if (!readOnly && onClick == null && query.isNotEmpty()) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "Clear",
@@ -149,34 +172,62 @@ fun GlassChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val glassConfig = LocalGlassConfig.current
     val bgBrush = if (isSelected) {
-        Brush.horizontalGradient(
-            colors = listOf(
-                Color(0xFF2C3E50),
-                Color(0xFF34495E)
+        if (glassConfig.isDark) {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    GlassAccentCobalt,
+                    Color(0xFF2563EB)
+                )
+            )
+        } else {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    Color(0xFF1E293B),
+                    Color(0xFF0F172A)
+                )
+            )
+        }
+    } else {
+        if (glassConfig.isDark) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0x2EFFFFFF),
+                    Color(0x14FFFFFF)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xE0FFFFFF),
+                    Color(0x99FFFFFF)
+                )
+            )
+        }
+    }
+    val textColor = if (isSelected) Color.White else glassConfig.textSecondary
+    val borderBrush = if (isSelected) {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.6f),
+                Color.White.copy(alpha = 0.2f)
             )
         )
     } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0xE6FFFFFF),
-                Color(0xB3FFFFFF)
-            )
-        )
+        glassConfig.borderBrush
     }
-    val textColor = if (isSelected) Color.White else GlassTextSecondary
-    val borderColor = if (isSelected) Color(0x33FFFFFF) else GlassBorderWhite
 
     Box(
         modifier = modifier
             .shadow(
                 elevation = if (isSelected) 4.dp else 2.dp,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0x100F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x100F172A)
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = bgBrush)
-            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(20.dp))
+            .border(width = 1.dp, brush = borderBrush, shape = RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

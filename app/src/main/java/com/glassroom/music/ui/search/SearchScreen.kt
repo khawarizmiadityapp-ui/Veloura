@@ -40,7 +40,7 @@ fun SearchScreen(
             GlassSearchBar(
                 query = uiState.query,
                 onQueryChange = viewModel::onQueryChange,
-                placeholder = "Search on Glassroom..."
+                placeholder = "Search on Veloura..."
             )
         }
 

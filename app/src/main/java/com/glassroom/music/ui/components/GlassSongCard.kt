@@ -60,7 +60,16 @@ fun GlassSongCard(
         glassConfig.cardBrush
     }
 
-    val borderColor = if (isPlaying) GlassAccentCobalt else glassConfig.borderHighlight
+    val borderBrush = if (isPlaying) {
+        Brush.verticalGradient(
+            listOf(
+                GlassAccentCobalt,
+                GlassAccentCobalt.copy(alpha = 0.45f)
+            )
+        )
+    } else {
+        glassConfig.borderBrush
+    }
 
     Box(
         modifier = modifier
@@ -72,7 +81,7 @@ fun GlassSongCard(
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = cardBg)
-            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(20.dp))
+            .border(width = 1.dp, brush = borderBrush, shape = RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(10.dp)
     ) {

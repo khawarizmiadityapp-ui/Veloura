@@ -56,10 +56,11 @@ fun GlassroomApp(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(com.glassroom.music.ui.theme.LocalGlassConfig.current.backgroundBrush)
+        modifier = modifier.fillMaxSize()
     ) {
+        // Atmospheric ambient backdrop for authentic optical glass refraction
+        com.glassroom.music.ui.components.VelouraBackdrop()
+
         // Main Navigation Content
         NavHost(
             navController = navController,

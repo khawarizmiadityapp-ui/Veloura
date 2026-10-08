@@ -1,18 +1,29 @@
 package com.glassroom.music.ui.home
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glassroom.music.R
 import com.glassroom.music.domain.model.Playlist
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.*
@@ -35,22 +46,78 @@ fun HomeScreen(
             .fillMaxSize(),
         contentPadding = PaddingValues(bottom = 120.dp)
     ) {
-        // Dynamic Greeting TopBar
+        // Veloura Branded Header with Crystal Logo Badge
         item {
-            GlassTopBar(
-                title = uiState.greeting,
-                subtitle = "Welcome to Glassroom",
-                actions = {
+            val glassConfig = LocalGlassConfig.current
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Glass Encapsulated Logo Badge
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .shadow(
+                                    elevation = 8.dp,
+                                    shape = RoundedCornerShape(18.dp),
+                                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A)
+                                )
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(brush = glassConfig.cardBrush)
+                                .border(
+                                    width = 1.dp,
+                                    brush = glassConfig.borderBrush,
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .padding(5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_veloura_symbol),
+                                contentDescription = "Veloura Logo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "VELOURA",
+                                style = GlassTypography.titleLarge.copy(
+                                    letterSpacing = 2.4.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = glassConfig.textPrimary
+                            )
+                            Text(
+                                text = uiState.greeting,
+                                style = GlassTypography.labelSmall,
+                                color = glassConfig.textSecondary
+                            )
+                        }
+                    }
+
                     GlassIconButton(
                         icon = Icons.Outlined.GraphicEq,
                         onClick = { viewModel.loadRecommendations() },
                         contentDescription = "Refresh"
                     )
                 }
-            )
+            }
         }
 
-        // Prominent Search Bar
+        // Prominent Search Bar (Instant Tap to Search Screen)
         item {
             Box(
                 modifier = Modifier
@@ -58,10 +125,9 @@ fun HomeScreen(
                     .padding(horizontal = 20.dp, vertical = 6.dp)
             ) {
                 GlassSearchBar(
-                    query = "",
-                    onQueryChange = {},
                     placeholder = "Search songs, artists, albums...",
-                    modifier = Modifier.clickable { onNavigateToSearch() }
+                    readOnly = true,
+                    onClick = onNavigateToSearch
                 )
             }
         }
