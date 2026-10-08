@@ -226,8 +226,9 @@ def extract_stream_url(video_id):
     
     # Check cache
     if clean_id in STREAM_CACHE and (now - STREAM_CACHE[clean_id]["time"] < 7200):
-        return STREAM_CACHE[clean_id]["url"]
+        return STREAM_CACHE[clean_id]["url"], None
 
+    last_err = ""
     # Attempt 1: android_vr & ios clients for direct audio without bot block
     ydl_opts = {
         "quiet": True,
@@ -242,8 +243,9 @@ def extract_stream_url(video_id):
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
-                return url
+                return url, None
     except Exception as e:
+        last_err = str(e)
         print(f"extract_stream_url error: {e}")
 
     # Attempt 2: fallback to any audio format
@@ -259,11 +261,12 @@ def extract_stream_url(video_id):
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
-                return url
+                return url, None
     except Exception as ex:
+        last_err += " | " + str(ex)
         print(f"extract_stream_url retry error: {ex}")
 
-    return None
+    return None, last_err
 
 @app.route("/", methods=["GET"])
 @app.route("/api", methods=["GET"])
@@ -393,7 +396,7 @@ def get_stream(track_id):
     elif clean_id.startswith("stream/"):
         clean_id = clean_id.replace("stream/", "")
         
-    stream_url = extract_stream_url(clean_id)
+    stream_url, err = extract_stream_url(clean_id)
     if stream_url:
         return jsonify({
             "id": track_id,
@@ -404,7 +407,8 @@ def get_stream(track_id):
         
     return jsonify({
         "error": "Audio stream not found",
-        "id": track_id
+        "id": track_id,
+        "detail": err or "No error returned"
     }), 404
 
 @app.route("/api/recommendations", methods=["GET"])
