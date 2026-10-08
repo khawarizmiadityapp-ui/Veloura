@@ -229,32 +229,32 @@ def extract_stream_url(video_id):
         return STREAM_CACHE[clean_id]["url"], None
 
     last_err = ""
-    # Attempt 1: web_safari client
+    # Attempt 1: android & android_music client (most reliable on cloud datacenter IPs)
     try:
-        ydl_opts = {
+        ydl_opts_android = {
             "quiet": True,
-            "format": "bestaudio/best",
+            "format": "ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["web_safari"]}}
+            "extractor_args": {"youtube": {"player_client": ["android", "android_music", "android_creator"]}}
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_android) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as e:
-        last_err = f"web_safari: {e}"
+        last_err = f"android: {e}"
 
-    # Attempt 2: tv & mweb client
+    # Attempt 2: tv_embedded & web_safari fallback
     try:
         ydl_opts_tv = {
             "quiet": True,
-            "format": "bestaudio/best",
+            "format": "ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["tv", "mweb"]}}
+            "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_safari"]}}
         }
         with yt_dlp.YoutubeDL(ydl_opts_tv) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
@@ -263,7 +263,7 @@ def extract_stream_url(video_id):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as ex:
-        last_err += f" | tv: {ex}"
+        last_err += f" | tv_embedded: {ex}"
 
     return None, last_err
 
