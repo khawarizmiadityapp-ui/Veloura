@@ -140,11 +140,26 @@ def extract_stream_url(video_id):
         return url.splitlines()[0].strip()
     return None
 
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({
+        "status": "online",
+        "service": "Veloura Audio Backend",
+        "version": "1.0.0",
+        "message": "Welcome to Veloura Backend API",
+        "endpoints": {
+            "health": "/api/health",
+            "recommendations": "/api/recommendations",
+            "search": "/api/search?q={query}",
+            "stream": "/api/stream/{track_id}"
+        }
+    })
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({
         "status": "online",
-        "service": "Glassroom Audio Backend",
+        "service": "Veloura Audio Backend",
         "version": "1.0.0"
     })
 
