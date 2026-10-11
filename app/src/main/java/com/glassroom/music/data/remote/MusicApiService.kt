@@ -18,7 +18,9 @@ interface MusicApiService {
 
     @GET("api/stream/{id}")
     suspend fun getStream(
-        @Path("id") trackId: String
+        @Path("id") trackId: String,
+        @Query("title") title: String? = null,
+        @Query("artist") artist: String? = null
     ): Response<StreamResponseDto>
 
     @GET("api/recommendations")

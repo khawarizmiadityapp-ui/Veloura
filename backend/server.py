@@ -456,17 +456,46 @@ def get_stream(track_id):
         clean_id = clean_id.replace("api/stream/", "")
     elif clean_id.startswith("stream/"):
         clean_id = clean_id.replace("stream/", "")
-    clean_id = re.sub(r'_sp_\d+', '', clean_id)
-    clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
+        
+    title = request.args.get("title", "").strip()
+    artist = request.args.get("artist", "").strip()
+    
+    # If legacy Spotify imported track with dummy id, search real YouTube video
+    is_sp_legacy = "_sp_" in clean_id or clean_id.startswith("track_")
+    if is_sp_legacy and (title or artist):
+        q = f"{artist} - {title}".strip() if artist else title
+        found = search_tracks(q, limit=1)
+        if found:
+            clean_id = found[0]["id"]
+    else:
+        clean_id = re.sub(r'_sp_\d+', '', clean_id)
+        clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
         
     stream_url, err = extract_stream_url(clean_id)
     if stream_url:
         return jsonify({
             "id": track_id,
+            "youtubeId": clean_id,
             "streamUrl": stream_url,
             "format": "m4a",
             "source": "youtube"
         })
+        
+    # If direct extraction failed but song title/artist is available, search YouTube as fallback
+    if title or artist:
+        q = f"{artist} - {title}".strip() if artist else title
+        found = search_tracks(q, limit=1)
+        if found and found[0]["id"] != clean_id:
+            fallback_id = found[0]["id"]
+            fallback_url, _ = extract_stream_url(fallback_id)
+            if fallback_url:
+                return jsonify({
+                    "id": track_id,
+                    "youtubeId": fallback_id,
+                    "streamUrl": fallback_url,
+                    "format": "m4a",
+                    "source": "youtube"
+                })
         
     return jsonify({
         "error": "Audio stream not found",
@@ -648,5 +677,15 @@ def spotify_import():
     })
 
 if __name__ == "__main__":
+    import threading
+    def prewarm():
+        time.sleep(1)
+        for t in CURATED_TRACKS[:4]:
+            try:
+                extract_stream_url(t["id"])
+            except Exception:
+                pass
+    threading.Thread(target=prewarm, daemon=True).start()
+
     print(f"Starting Glassroom Backend on http://0.0.0.0:{PORT}...")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)

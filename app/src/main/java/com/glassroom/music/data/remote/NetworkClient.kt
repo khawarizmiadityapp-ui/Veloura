@@ -7,8 +7,18 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
-    // Default emulator local address to backend
-    const val DEFAULT_BASE_URL = "http://10.0.2.2:5000/"
+    const val LAN_SERVER_URL = "http://10.117.54.56:5000/"
+    const val ADB_REVERSE_URL = "http://127.0.0.1:5000/"
+    const val EMULATOR_URL = "http://10.0.2.2:5000/"
+
+    // Default base URL now targets the LAN backend where the server runs
+    const val DEFAULT_BASE_URL = LAN_SERVER_URL
+
+    val candidateUrls = listOf(
+        LAN_SERVER_URL,
+        ADB_REVERSE_URL,
+        EMULATOR_URL
+    )
 
     private var currentBaseUrl: String = DEFAULT_BASE_URL
     private var cachedApiService: MusicApiService? = null

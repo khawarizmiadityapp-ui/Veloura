@@ -32,7 +32,12 @@ class PreferencesManager(private val context: Context) {
     }
 
     val backendUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_BACKEND_URL] ?: NetworkClient.DEFAULT_BASE_URL
+        val saved = prefs[KEY_BACKEND_URL]
+        if (saved.isNullOrBlank() || saved.contains("10.0.2.2")) {
+            NetworkClient.DEFAULT_BASE_URL
+        } else {
+            saved
+        }
     }
 
     val gaplessFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->

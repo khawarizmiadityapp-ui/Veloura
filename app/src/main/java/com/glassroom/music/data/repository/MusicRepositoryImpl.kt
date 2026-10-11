@@ -191,35 +191,37 @@ class MusicRepositoryImpl(
         }
     }
 
-    override suspend fun resolveStreamUrl(trackId: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val api = NetworkClient.getApiService()
-            val response = api.getStream(trackId)
-            if (response.isSuccessful && response.body()?.streamUrl != null) {
-                var url = response.body()!!.streamUrl!!
-                if (url.startsWith("/")) {
-                    val base = NetworkClient.getBaseUrl().removeSuffix("/")
-                    url = "$base$url"
+    override suspend fun resolveStreamUrl(
+        trackId: String,
+        title: String,
+        artist: String
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val candidateHosts = (listOf(NetworkClient.getBaseUrl()) + NetworkClient.candidateUrls).distinct()
+
+        for (host in candidateHosts) {
+            try {
+                val api = NetworkClient.getApiService(host)
+                val response = api.getStream(
+                    trackId = trackId,
+                    title = title.ifBlank { null },
+                    artist = artist.ifBlank { null }
+                )
+                if (response.isSuccessful && response.body()?.streamUrl != null) {
+                    val url = response.body()!!.streamUrl!!
+                    if (url.startsWith("http") &&
+                        !url.contains("/api/stream") &&
+                        !url.contains("commondatastorage.googleapis.com") &&
+                        !url.contains("codeskulptor")
+                    ) {
+                        NetworkClient.updateBaseUrl(host)
+                        return@withContext Result.success(url)
+                    }
                 }
-                Result.success(url)
-            } else {
-                val found = defaultCuratedTracks.firstOrNull { it.id == trackId }
-                val fallbackUrl = found?.streamUrl ?: "/api/stream/$trackId"
-                val fullUrl = if (fallbackUrl.startsWith("/")) {
-                    val base = NetworkClient.getBaseUrl().removeSuffix("/")
-                    "$base$fallbackUrl"
-                } else fallbackUrl
-                Result.success(fullUrl)
+            } catch (_: Exception) {
             }
-        } catch (e: Exception) {
-            val found = defaultCuratedTracks.firstOrNull { it.id == trackId }
-            val fallbackUrl = found?.streamUrl ?: "/api/stream/$trackId"
-            val fullUrl = if (fallbackUrl.startsWith("/")) {
-                val base = NetworkClient.getBaseUrl().removeSuffix("/")
-                "$base$fallbackUrl"
-            } else fallbackUrl
-            Result.success(fullUrl)
         }
+
+        Result.failure(Exception("Audio stream not available for track $trackId"))
     }
 
     override suspend fun getRecommendations(): Result<Map<String, List<Track>>> = withContext(Dispatchers.IO) {

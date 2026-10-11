@@ -182,22 +182,34 @@ class PlayerManager(
             val isDirectCdn = track.streamUrl.isNotBlank() &&
                     track.streamUrl.startsWith("http") &&
                     !track.streamUrl.contains("/api/stream") &&
-                    !track.streamUrl.contains("commondatastorage.googleapis.com")
+                    !track.streamUrl.contains("commondatastorage.googleapis.com") &&
+                    !track.streamUrl.contains("codeskulptor")
 
             val resolvedUrl = if (isDirectCdn) {
                 track.streamUrl
             } else {
-                val res = musicRepository.resolveStreamUrl(track.id)
+                val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
                 val direct = res.getOrNull()
-                if (!direct.isNullOrBlank() && direct.startsWith("http") && !direct.contains("/api/stream")) {
+                if (!direct.isNullOrBlank() &&
+                    direct.startsWith("http") &&
+                    !direct.contains("/api/stream") &&
+                    !direct.contains("commondatastorage.googleapis.com") &&
+                    !direct.contains("codeskulptor")
+                ) {
                     direct
                 } else {
-                    track.streamUrl
+                    ""
                 }
             }
 
-            if (resolvedUrl.isBlank()) {
+            // Strictly prohibit any dummy sample audio from playing
+            if (resolvedUrl.isBlank() ||
+                resolvedUrl.contains("commondatastorage.googleapis.com") ||
+                resolvedUrl.contains("codeskulptor") ||
+                !resolvedUrl.startsWith("http")
+            ) {
                 _isLoading.value = false
+                _isPlaying.value = false
                 return@launch
             }
 

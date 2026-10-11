@@ -18,7 +18,7 @@ class GlassroomDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
 
     companion object {
         const val DATABASE_NAME = "glassroom_music.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         const val TABLE_TRACKS = "tracks"
         const val TABLE_PLAYLISTS = "playlists"
@@ -93,13 +93,40 @@ class GlassroomDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         )
     }
 
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        try {
+            // Immediately purge any legacy dummy audio streams from Kangaroo MusiQue / Sevish / commondatastorage
+            db.execSQL(
+                """
+                UPDATE $TABLE_TRACKS 
+                SET streamReference = '' 
+                WHERE streamReference LIKE '%commondatastorage%' 
+                   OR streamReference LIKE '%codeskulptor%'
+                """.trimIndent()
+            )
+        } catch (_: Exception) {
+        }
+    }
+
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_HISTORY")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_FAVORITES")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_PLAYLIST_TRACKS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_PLAYLISTS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_TRACKS")
-        onCreate(db)
+        try {
+            db.execSQL(
+                """
+                UPDATE $TABLE_TRACKS 
+                SET streamReference = '' 
+                WHERE streamReference LIKE '%commondatastorage%' 
+                   OR streamReference LIKE '%codeskulptor%'
+                """.trimIndent()
+            )
+        } catch (_: Exception) {
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_HISTORY")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_FAVORITES")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_PLAYLIST_TRACKS")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_PLAYLISTS")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_TRACKS")
+            onCreate(db)
+        }
     }
 
     fun notifyPlaylistsChanged() {
