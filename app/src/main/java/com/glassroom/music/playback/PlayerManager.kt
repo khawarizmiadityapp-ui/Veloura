@@ -1,6 +1,7 @@
 package com.glassroom.music.playback
 
 import android.content.Context
+import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -36,6 +37,14 @@ class PlayerManager(
     private val playlistRepository: PlaylistRepository
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
+
+    init {
+        try {
+            val serviceIntent = Intent(context, MusicService::class.java)
+            context.startService(serviceIntent)
+        } catch (_: Exception) {
+        }
+    }
 
     val exoPlayer: ExoPlayer by lazy {
         val audioAttributes = AudioAttributes.Builder()

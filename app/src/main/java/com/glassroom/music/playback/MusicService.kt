@@ -22,7 +22,7 @@ class MusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
 
     companion object {
-        const val NOTIFICATION_CHANNEL_ID = "glassroom_music_playback"
+        const val NOTIFICATION_CHANNEL_ID = "veloura_music_playback_live"
         const val NOTIFICATION_ID = 1001
     }
 
@@ -47,14 +47,16 @@ class MusicService : MediaSessionService() {
                 .setSessionActivity(sessionActivityPendingIntent)
                 .build()
 
+            addSession(mediaSession!!)
+
             // Connect DefaultMediaNotificationProvider for ongoing MediaStyle notification & Dynamic Island
-            setMediaNotificationProvider(
-                DefaultMediaNotificationProvider.Builder(this)
-                    .setChannelId(NOTIFICATION_CHANNEL_ID)
-                    .setChannelName(R.string.app_name)
-                    .setNotificationId(NOTIFICATION_ID)
-                    .build()
-            )
+            val provider = DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(NOTIFICATION_CHANNEL_ID)
+                .setChannelName(R.string.app_name)
+                .setNotificationId(NOTIFICATION_ID)
+                .build()
+            provider.setSmallIcon(R.drawable.ic_launcher_foreground)
+            setMediaNotificationProvider(provider)
         }
     }
 
@@ -67,8 +69,16 @@ class MusicService : MediaSessionService() {
         return mediaSession
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = mediaSession?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0 || player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+            stopSelf()
+        }
+    }
+
     override fun onDestroy() {
         mediaSession?.run {
+            removeSession(this)
             release()
             mediaSession = null
         }
@@ -80,9 +90,9 @@ class MusicService : MediaSessionService() {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Veloura Playback",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Shows currently playing song in Veloura"
+                description = "Shows currently playing song in Veloura & Dynamic Island"
                 setShowBadge(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
