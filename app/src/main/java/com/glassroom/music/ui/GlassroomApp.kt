@@ -49,11 +49,9 @@ fun GlassroomApp(
     var isFullPlayerExpanded by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
-    val isCurrentFavorite by if (currentTrack != null) {
-        app.container.playlistRepository.isFavorite(currentTrack!!.id).collectAsState(initial = false)
-    } else {
-        remember { mutableStateOf(false) }
-    }
+    val isCurrentFavorite by (currentTrack?.let {
+        app.container.playlistRepository.isFavorite(it.id)
+    } ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
 
     Box(
         modifier = modifier.fillMaxSize()

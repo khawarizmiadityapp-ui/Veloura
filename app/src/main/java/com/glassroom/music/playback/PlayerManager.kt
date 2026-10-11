@@ -224,7 +224,7 @@ class PlayerManager(
 
                 try {
                     val serviceIntent = android.content.Intent(context, MusicService::class.java)
-                    androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
+                    context.startService(serviceIntent)
                 } catch (_: Exception) {
                 }
             }
