@@ -21,6 +21,36 @@ class MusicRepositoryImpl(
     // Curated fallback tracks with real YouTube IDs
     private val defaultCuratedTracks = listOf(
         Track(
+            id = "kJQP7kiw5Fk",
+            title = "Die With A Smile",
+            artist = "Lady Gaga & Bruno Mars",
+            album = "Die With A Smile",
+            thumbnail = "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
+            duration = 251,
+            streamUrl = "/api/stream/kJQP7kiw5Fk",
+            source = "youtube"
+        ),
+        Track(
+            id = "eVli-tstM5E",
+            title = "Espresso",
+            artist = "Sabrina Carpenter",
+            album = "Short n' Sweet",
+            thumbnail = "https://i.ytimg.com/vi/eVli-tstM5E/hqdefault.jpg",
+            duration = 175,
+            streamUrl = "/api/stream/eVli-tstM5E",
+            source = "youtube"
+        ),
+        Track(
+            id = "d5gf9dXHeG4",
+            title = "Birds of a Feather",
+            artist = "Billie Eilish",
+            album = "Hit Me Hard and Soft",
+            thumbnail = "https://i.ytimg.com/vi/d5gf9dXHeG4/hqdefault.jpg",
+            duration = 198,
+            streamUrl = "/api/stream/d5gf9dXHeG4",
+            source = "youtube"
+        ),
+        Track(
             id = "34Na4j8AVgA",
             title = "Starboy",
             artist = "The Weeknd ft. Daft Punk",
@@ -78,6 +108,36 @@ class MusicRepositoryImpl(
             thumbnail = "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
             duration = 203,
             streamUrl = "/api/stream/TUVcZfQe-Kw",
+            source = "youtube"
+        ),
+        Track(
+            id = "yKNxeF4KMsY",
+            title = "Yellow",
+            artist = "Coldplay",
+            album = "Parachutes",
+            thumbnail = "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg",
+            duration = 269,
+            streamUrl = "/api/stream/yKNxeF4KMsY",
+            source = "youtube"
+        ),
+        Track(
+            id = "g46u-5aJ32g",
+            title = "Satu Bulan",
+            artist = "Bernadya",
+            album = "Sialnya, Hidup Harus Tetap Berjalan",
+            thumbnail = "https://i.ytimg.com/vi/g46u-5aJ32g/hqdefault.jpg",
+            duration = 195,
+            streamUrl = "/api/stream/g46u-5aJ32g",
+            source = "youtube"
+        ),
+        Track(
+            id = "ic8j13piAhQ",
+            title = "Cruel Summer",
+            artist = "Taylor Swift",
+            album = "Lover",
+            thumbnail = "https://i.ytimg.com/vi/ic8j13piAhQ/hqdefault.jpg",
+            duration = 178,
+            streamUrl = "/api/stream/ic8j13piAhQ",
             source = "youtube"
         )
     )

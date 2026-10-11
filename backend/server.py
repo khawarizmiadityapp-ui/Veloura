@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import os
 import re
@@ -50,6 +51,36 @@ LEGACY_ID_MAP = {
 
 # Curated tracks with REAL YouTube video IDs matching the actual songs
 CURATED_TRACKS = [
+    {
+        "id": "kJQP7kiw5Fk",
+        "title": "Die With A Smile",
+        "artist": "Lady Gaga & Bruno Mars",
+        "album": "Die With A Smile",
+        "thumbnail": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
+        "duration": 251,
+        "streamUrl": "/api/stream/kJQP7kiw5Fk",
+        "source": "youtube"
+    },
+    {
+        "id": "eVli-tstM5E",
+        "title": "Espresso",
+        "artist": "Sabrina Carpenter",
+        "album": "Short n' Sweet",
+        "thumbnail": "https://i.ytimg.com/vi/eVli-tstM5E/hqdefault.jpg",
+        "duration": 175,
+        "streamUrl": "/api/stream/eVli-tstM5E",
+        "source": "youtube"
+    },
+    {
+        "id": "d5gf9dXHeG4",
+        "title": "Birds of a Feather",
+        "artist": "Billie Eilish",
+        "album": "Hit Me Hard and Soft",
+        "thumbnail": "https://i.ytimg.com/vi/d5gf9dXHeG4/hqdefault.jpg",
+        "duration": 198,
+        "streamUrl": "/api/stream/d5gf9dXHeG4",
+        "source": "youtube"
+    },
     {
         "id": "34Na4j8AVgA",
         "title": "Starboy",
@@ -108,6 +139,36 @@ CURATED_TRACKS = [
         "thumbnail": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
         "duration": 203,
         "streamUrl": "/api/stream/TUVcZfQe-Kw",
+        "source": "youtube"
+    },
+    {
+        "id": "yKNxeF4KMsY",
+        "title": "Yellow",
+        "artist": "Coldplay",
+        "album": "Parachutes",
+        "thumbnail": "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg",
+        "duration": 269,
+        "streamUrl": "/api/stream/yKNxeF4KMsY",
+        "source": "youtube"
+    },
+    {
+        "id": "g46u-5aJ32g",
+        "title": "Satu Bulan",
+        "artist": "Bernadya",
+        "album": "Sialnya, Hidup Harus Tetap Berjalan",
+        "thumbnail": "https://i.ytimg.com/vi/g46u-5aJ32g/hqdefault.jpg",
+        "duration": 195,
+        "streamUrl": "/api/stream/g46u-5aJ32g",
+        "source": "youtube"
+    },
+    {
+        "id": "ic8j13piAhQ",
+        "title": "Cruel Summer",
+        "artist": "Taylor Swift",
+        "album": "Lover",
+        "thumbnail": "https://i.ytimg.com/vi/ic8j13piAhQ/hqdefault.jpg",
+        "duration": 178,
+        "streamUrl": "/api/stream/ic8j13piAhQ",
         "source": "youtube"
     }
 ]
@@ -221,7 +282,8 @@ def search_tracks(query, limit=12):
 
 def extract_stream_url(video_id):
     """Extracts direct audio stream URL using yt_dlp Python library with multiple player clients."""
-    clean_id = LEGACY_ID_MAP.get(video_id, video_id)
+    clean_id = re.sub(r'_sp_\d+', '', video_id)
+    clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
     now = time.time()
     
     # Check cache
@@ -389,11 +451,13 @@ def get_track(track_id):
 @app.route("/api/stream/<path:track_id>", methods=["GET"])
 @app.route("/stream/<path:track_id>", methods=["GET"])
 def get_stream(track_id):
-    clean_id = LEGACY_ID_MAP.get(track_id, track_id)
+    clean_id = track_id
     if clean_id.startswith("api/stream/"):
         clean_id = clean_id.replace("api/stream/", "")
     elif clean_id.startswith("stream/"):
         clean_id = clean_id.replace("stream/", "")
+    clean_id = re.sub(r'_sp_\d+', '', clean_id)
+    clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
         
     stream_url, err = extract_stream_url(clean_id)
     if stream_url:
@@ -499,47 +563,74 @@ def spotify_import():
     playlist_data = scrape_spotify_playlist(url)
     raw_tracks = playlist_data.get("tracks", [])
     
+    def match_track(item):
+        t_title = item.get("title", "").strip()
+        t_artist = item.get("artist", "").strip()
+        if not t_title:
+            return None
+
+        # Check exact curated match first
+        for c in CURATED_TRACKS:
+            if t_title.lower() == c["title"].lower() and (not t_artist or t_artist.lower() in c["artist"].lower()):
+                return {
+                    "id": c["id"],
+                    "title": t_title,
+                    "artist": t_artist or c["artist"],
+                    "album": playlist_data["title"],
+                    "thumbnail": c["thumbnail"],
+                    "duration": c["duration"],
+                    "streamUrl": c["streamUrl"],
+                    "source": "youtube",
+                    "status": "matched"
+                }
+
+        # Search real song on YouTube
+        query = f"{t_artist} - {t_title}" if t_artist else t_title
+        results = search_tracks(query, limit=1)
+        if not results and t_artist:
+            results = search_tracks(t_title, limit=1)
+
+        if results:
+            best = results[0]
+            return {
+                "id": best["id"],
+                "title": t_title,
+                "artist": t_artist or best.get("artist", "YouTube"),
+                "album": playlist_data["title"],
+                "thumbnail": best.get("thumbnail") or f"https://i.ytimg.com/vi/{best['id']}/hqdefault.jpg",
+                "duration": best.get("duration") or item.get("duration", 180),
+                "streamUrl": f"/api/stream/{best['id']}",
+                "source": "youtube",
+                "status": "matched"
+            }
+        else:
+            return {
+                "id": f"unmatched_{abs(hash(t_title)) % 10000000}",
+                "title": t_title,
+                "artist": t_artist,
+                "album": playlist_data["title"],
+                "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+                "duration": item.get("duration", 180),
+                "streamUrl": "",
+                "source": "spotify_imported",
+                "status": "unavailable"
+            }
+
     matched_tracks = []
     matched_count = 0
     unavailable_count = 0
 
-    for idx, item in enumerate(raw_tracks):
-        query = f"{item['artist']} {item['title']}".strip().lower()
-        
-        # Check instant match against curated library first for maximum speed
-        curated_match = next(
-            (c for c in CURATED_TRACKS if item['title'].lower() in c['title'].lower() or item['artist'].lower() in c['artist'].lower()),
-            None
-        )
-        
-        if curated_match:
-            matched_tracks.append({
-                "id": curated_match["id"] + f"_sp_{idx}",
-                "title": item["title"],
-                "artist": item["artist"],
-                "album": playlist_data["title"],
-                "thumbnail": curated_match["thumbnail"],
-                "duration": item.get("duration", curated_match["duration"]),
-                "streamUrl": curated_match["streamUrl"],
-                "source": "spotify_imported",
-                "status": "matched"
-            })
-            matched_count += 1
-        else:
-            # Fallback to curated track directly for instant 100% reliable matching
-            fallback = CURATED_TRACKS[idx % len(CURATED_TRACKS)]
-            matched_tracks.append({
-                "id": fallback["id"] + f"_sp_{idx}",
-                "title": item["title"],
-                "artist": item["artist"],
-                "album": playlist_data["title"],
-                "thumbnail": fallback["thumbnail"],
-                "duration": item.get("duration", fallback["duration"]),
-                "streamUrl": fallback["streamUrl"],
-                "source": "spotify_imported",
-                "status": "matched"
-            })
-            matched_count += 1
+    # Match concurrently up to 6 workers for speed
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        results = list(executor.map(match_track, raw_tracks))
+
+    for res in results:
+        if res:
+            if res.get("status") == "matched":
+                matched_count += 1
+            else:
+                unavailable_count += 1
+            matched_tracks.append(res)
 
     return jsonify({
         "playlist": {

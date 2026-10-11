@@ -94,7 +94,7 @@ fun GlassSongCard(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFE2E8F0))
+                    .background(if (glassConfig.isDark) Color(0xFF1E2638) else Color(0xFFE2E8F0))
             ) {
                 AsyncImage(
                     model = track.thumbnail,
@@ -130,7 +130,7 @@ fun GlassSongCard(
                 Text(
                     text = track.durationFormatted,
                     style = GlassTypography.labelSmall,
-                    color = GlassTextTertiary,
+                    color = glassConfig.textTertiary,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
@@ -138,7 +138,7 @@ fun GlassSongCard(
             // Favorite Button
             if (onFavoriteClick != null) {
                 val heartColor by animateColorAsState(
-                    targetValue = if (track.isFavorite) GlassHeartActive else GlassTextTertiary,
+                    targetValue = if (track.isFavorite) GlassHeartActive else glassConfig.textTertiary,
                     label = "heart_color"
                 )
                 Icon(
@@ -158,7 +158,7 @@ fun GlassSongCard(
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = "More",
-                    tint = GlassTextTertiary,
+                    tint = glassConfig.textTertiary,
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)

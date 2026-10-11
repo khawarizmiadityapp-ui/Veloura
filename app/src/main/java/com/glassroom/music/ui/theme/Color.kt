@@ -87,21 +87,21 @@ data class GlassConfig(
         get() {
             val factor = intensity.coerceIn(0.2f, 1.0f)
             return if (isDark) {
-                val topAlpha = (factor * 0.52f).coerceIn(0.20f, 0.62f)
-                val bottomAlpha = (factor * 0.32f).coerceIn(0.10f, 0.42f)
+                val topAlpha = (factor * 0.45f).coerceIn(0.20f, 0.55f)
+                val bottomAlpha = (factor * 0.26f).coerceIn(0.10f, 0.36f)
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF1E2638).copy(alpha = topAlpha),
-                        Color(0xFF0D121C).copy(alpha = bottomAlpha)
+                        Color(0xFF2A364B).copy(alpha = topAlpha),
+                        Color(0xFF121722).copy(alpha = bottomAlpha)
                     )
                 )
             } else {
-                val topAlpha = (factor * 0.70f).coerceIn(0.30f, 0.78f)
-                val bottomAlpha = (factor * 0.42f).coerceIn(0.18f, 0.50f)
+                val topAlpha = (factor * 0.78f).coerceIn(0.45f, 0.88f)
+                val bottomAlpha = (factor * 0.46f).coerceIn(0.22f, 0.58f)
                 Brush.verticalGradient(
                     listOf(
                         Color(0xFFFFFFFF).copy(alpha = topAlpha),
-                        Color(0xFFF1F5F9).copy(alpha = bottomAlpha)
+                        Color(0xFFEDF2F7).copy(alpha = bottomAlpha)
                     )
                 )
             }
@@ -111,17 +111,19 @@ data class GlassConfig(
         get() = if (isDark) {
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = 0.32f),
-                    Color.White.copy(alpha = 0.10f),
-                    Color(0xFF000000).copy(alpha = 0.25f)
+                    Color.White.copy(alpha = 0.45f),
+                    Color.White.copy(alpha = 0.16f),
+                    Color(0xFF818CF8).copy(alpha = 0.22f),
+                    Color(0x33000000)
                 )
             )
         } else {
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = 0.88f),
-                    Color.White.copy(alpha = 0.40f),
-                    Color(0xFFCBD5E1).copy(alpha = 0.25f)
+                    Color.White.copy(alpha = 0.95f),
+                    Color.White.copy(alpha = 0.52f),
+                    Color(0xFF38BDF8).copy(alpha = 0.28f),
+                    Color(0x260F172A)
                 )
             )
         }
@@ -139,10 +141,10 @@ data class GlassConfig(
         get() = if (isDark) Color(0xFF64748B) else GlassTextTertiary
 
     val borderHighlight: Color
-        get() = if (isDark) Color(0x33FFFFFF) else GlassBorderHighlight
+        get() = if (isDark) Color(0x40FFFFFF) else GlassBorderHighlight
 
     val borderSubtle: Color
-        get() = if (isDark) Color(0x1FFFFFFF) else GlassBorderSubtle
+        get() = if (isDark) Color(0x24FFFFFF) else GlassBorderSubtle
 
     val miniPlayerBrush: Brush
         get() {
@@ -150,15 +152,15 @@ data class GlassConfig(
             return if (isDark) {
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF1B2230).copy(alpha = (factor * 0.82f).coerceIn(0.45f, 0.88f)),
-                        Color(0xFF0E131C).copy(alpha = (factor * 0.68f).coerceIn(0.35f, 0.78f))
+                        Color(0xFF242E40).copy(alpha = (factor * 0.75f).coerceIn(0.48f, 0.85f)),
+                        Color(0xFF101520).copy(alpha = (factor * 0.60f).coerceIn(0.36f, 0.72f))
                     )
                 )
             } else {
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = (factor * 0.82f).coerceIn(0.45f, 0.88f)),
-                        Color(0xFFF8FAFC).copy(alpha = (factor * 0.62f).coerceIn(0.32f, 0.72f))
+                        Color.White.copy(alpha = (factor * 0.88f).coerceIn(0.60f, 0.94f)),
+                        Color(0xFFF1F5F9).copy(alpha = (factor * 0.68f).coerceIn(0.42f, 0.80f))
                     )
                 )
             }

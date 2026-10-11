@@ -71,10 +71,10 @@ fun FullPlayerScreen(
     if (currentTrack == null) {
         Box(
             modifier = modifier
-                .fillMaxSize()
-                .background(glassConfig.backgroundBrush),
+                .fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            VelouraBackdrop()
             Text(text = "No track selected", style = GlassTypography.bodyLarge, color = glassConfig.textSecondary)
         }
         return
@@ -83,10 +83,10 @@ fun FullPlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(glassConfig.backgroundBrush)
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
+        // Atmospheric glowing backdrop
+        VelouraBackdrop()
+
         // Soft ambient glow background circle behind artwork
         Box(
             modifier = Modifier
@@ -97,8 +97,8 @@ fun FullPlayerScreen(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0x33A5B4FC),
-                            Color(0x1A93C5FD),
+                            if (glassConfig.isDark) Color(0x4D8B5CF6) else Color(0x33A5B4FC),
+                            if (glassConfig.isDark) Color(0x2606B6D4) else Color(0x1A93C5FD),
                             Color.Transparent
                         )
                     )
@@ -108,6 +108,8 @@ fun FullPlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -130,13 +132,13 @@ fun FullPlayerScreen(
                     Text(
                         text = "PLAYING FROM",
                         style = GlassTypography.labelSmall,
-                        color = GlassTextTertiary,
+                        color = glassConfig.textTertiary,
                         fontSize = 10.sp
                     )
                     Text(
-                        text = if (currentTrack?.album.isNullOrBlank()) "Glassroom Audio" else currentTrack!!.album,
+                        text = if (currentTrack?.album.isNullOrBlank()) "Veloura Audio" else currentTrack!!.album,
                         style = GlassTypography.labelLarge,
-                        color = GlassTextPrimary,
+                        color = glassConfig.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -153,31 +155,39 @@ fun FullPlayerScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Center Large Artwork
+            // Center Large Artwork with Frosted Glass Frame
             Box(
                 modifier = Modifier
-                    .size(280.dp)
+                    .size(285.dp)
                     .scale(artworkScale)
                     .shadow(
-                        elevation = 20.dp,
+                        elevation = 28.dp,
                         shape = RoundedCornerShape(32.dp),
-                        ambientColor = Color(0x330F172A),
-                        spotColor = Color(0x240F172A)
+                        ambientColor = if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2A38BDF8),
+                        spotColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x1F818CF8)
                     )
                     .clip(RoundedCornerShape(32.dp))
-                    .background(Color(0xFFE2E8F0))
+                    .background(brush = glassConfig.cardBrush)
                     .border(
                         width = 1.5.dp,
-                        color = GlassBorderHighlight,
+                        brush = glassConfig.borderBrush,
                         shape = RoundedCornerShape(32.dp)
                     )
+                    .padding(7.dp)
             ) {
-                AsyncImage(
-                    model = currentTrack?.thumbnail,
-                    contentDescription = currentTrack?.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(if (glassConfig.isDark) Color(0xFF1E2638) else Color(0xFFE2E8F0))
+                ) {
+                    AsyncImage(
+                        model = currentTrack?.thumbnail,
+                        contentDescription = currentTrack?.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -192,7 +202,7 @@ fun FullPlayerScreen(
                     Text(
                         text = currentTrack?.title ?: "",
                         style = GlassTypography.headlineLarge,
-                        color = GlassTextPrimary,
+                        color = glassConfig.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -200,7 +210,7 @@ fun FullPlayerScreen(
                     Text(
                         text = currentTrack?.artist ?: "",
                         style = GlassTypography.bodyLarge,
-                        color = GlassTextSecondary,
+                        color = glassConfig.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -209,7 +219,7 @@ fun FullPlayerScreen(
                 GlassIconButton(
                     icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     onClick = onToggleFavorite,
-                    tint = if (isFavorite) GlassHeartActive else GlassTextTertiary,
+                    tint = if (isFavorite) GlassHeartActive else glassConfig.textTertiary,
                     size = 48.dp,
                     iconSize = 24.dp,
                     contentDescription = "Favorite"

@@ -269,10 +269,11 @@ fun HomeScreen(
 
 @Composable
 fun SectionHeader(title: String, modifier: Modifier = Modifier) {
+    val glassConfig = LocalGlassConfig.current
     Text(
         text = title,
         style = GlassTypography.headlineMedium,
-        color = GlassTextPrimary,
+        color = glassConfig.textPrimary,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 14.dp)
