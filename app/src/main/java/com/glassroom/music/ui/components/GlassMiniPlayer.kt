@@ -130,9 +130,16 @@ fun GlassMiniPlayer(
                 // Play / Pause Glass Button
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
+                        .shadow(6.dp, CircleShape, spotColor = Color(0x3338BDF8))
                         .clip(CircleShape)
-                        .background(Color(0xFF2C3E50))
+                        .background(
+                            brush = Brush.verticalGradient(
+                                if (glassConfig.isDark) listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                                else listOf(Color(0xFF1E293B), Color(0xFF334155))
+                            )
+                        )
+                        .border(1.dp, Color(0x66FFFFFF), CircleShape)
                         .clickable(onClick = onPlayPause),
                     contentAlignment = Alignment.Center
                 ) {
@@ -146,19 +153,24 @@ fun GlassMiniPlayer(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 // Next Button
-                Icon(
-                    imageVector = Icons.Filled.SkipNext,
-                    contentDescription = "Next",
-                    tint = GlassTextPrimary,
+                Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .clickable(onClick = onNext)
-                        .padding(6.dp)
-                )
+                        .background(if (glassConfig.isDark) Color(0x1AFFFFFF) else Color(0x140F172A))
+                        .clickable(onClick = onNext),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = "Next",
+                        tint = glassConfig.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             // Slim glowing progress bar on the bottom edge of mini player
@@ -166,13 +178,17 @@ fun GlassMiniPlayer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(Color(0x1F0F172A))
+                    .background(if (glassConfig.isDark) Color(0x1AFFFFFF) else Color(0x140F172A))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(progress)
                         .fillMaxHeight()
-                        .background(Color(0xFF2C3E50))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(GlassAccentCobalt, GlassAccentMint)
+                            )
+                        )
                 )
             }
         }

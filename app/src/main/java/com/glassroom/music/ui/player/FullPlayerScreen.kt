@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -155,23 +155,34 @@ fun FullPlayerScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    GlassIconButton(
-                        icon = Icons.Filled.Lyrics,
-                        onClick = { showLyrics = !showLyrics },
-                        size = 44.dp,
-                        iconSize = 22.dp,
-                        tint = if (showLyrics) GlassAccentMint else glassConfig.textTertiary,
-                        backgroundBrush = if (showLyrics) {
-                            Brush.verticalGradient(
-                                if (glassConfig.isDark) listOf(Color(0x6606B6D4), Color(0x330891B2))
-                                else listOf(Color(0xFFCCFBF1), Color(0xFF99F6E4))
-                            )
-                        } else glassConfig.cardBrush,
-                        contentDescription = "Toggle Lyrics"
+                    val lyricsBtnScale by animateFloatAsState(
+                        targetValue = if (showLyrics) 1.06f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        ),
+                        label = "lyrics_btn_scale"
                     )
 
+                    Box(modifier = Modifier.scale(lyricsBtnScale)) {
+                        GlassIconButton(
+                            icon = Icons.Filled.Lyrics,
+                            onClick = { showLyrics = !showLyrics },
+                            size = 44.dp,
+                            iconSize = 22.dp,
+                            tint = if (showLyrics) GlassAccentMint else glassConfig.textTertiary,
+                            backgroundBrush = if (showLyrics) {
+                                Brush.verticalGradient(
+                                    if (glassConfig.isDark) listOf(Color(0x6606B6D4), Color(0x330891B2))
+                                    else listOf(Color(0xFFCCFBF1), Color(0xFF99F6E4))
+                                )
+                            } else glassConfig.cardBrush,
+                            contentDescription = "Toggle Lyrics"
+                        )
+                    }
+
                     GlassIconButton(
-                        icon = Icons.Filled.QueueMusic,
+                        icon = Icons.AutoMirrored.Filled.QueueMusic,
                         onClick = { showQueueSheet = true },
                         size = 44.dp,
                         iconSize = 22.dp,
@@ -303,14 +314,31 @@ fun FullPlayerScreen(
                     )
                 }
 
-                GlassIconButton(
-                    icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    onClick = onToggleFavorite,
-                    tint = if (isFavorite) GlassHeartActive else glassConfig.textTertiary,
-                    size = 48.dp,
-                    iconSize = 24.dp,
-                    contentDescription = "Favorite"
+                val favScale by animateFloatAsState(
+                    targetValue = if (isFavorite) 1.15f else 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "fav_scale"
                 )
+
+                Box(modifier = Modifier.scale(favScale)) {
+                    GlassIconButton(
+                        icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        onClick = onToggleFavorite,
+                        tint = if (isFavorite) GlassHeartActive else glassConfig.textTertiary,
+                        backgroundBrush = if (isFavorite) {
+                            Brush.verticalGradient(
+                                if (glassConfig.isDark) listOf(Color(0x40EF4444), Color(0x20F43F5E))
+                                else listOf(Color(0xFFFFE4E6), Color(0xFFFECDD3))
+                            )
+                        } else glassConfig.cardBrush,
+                        size = 48.dp,
+                        iconSize = 24.dp,
+                        contentDescription = "Favorite"
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

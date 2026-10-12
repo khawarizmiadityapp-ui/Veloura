@@ -1,6 +1,8 @@
 package com.glassroom.music.ui.components
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -129,20 +131,28 @@ fun GlassIconButton(
     val effectiveBg = backgroundBrush ?: glassConfig.cardBrush
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(targetValue = if (isPressed) 0.92f else 1f, label = "icon_press")
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "icon_press_spring"
+    )
 
     Box(
         modifier = modifier
             .scale(scale)
             .size(size)
             .shadow(
-                elevation = 4.dp,
+                elevation = 8.dp,
                 shape = CircleShape,
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A)
+                ambientColor = if (glassConfig.isDark) Color(0x66000000) else Color(0x1F0F172A),
+                spotColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x2638BDF8)
             )
             .clip(CircleShape)
             .background(brush = effectiveBg)
-            .border(width = 1.dp, brush = glassConfig.borderBrush, shape = CircleShape)
+            .border(width = 1.2.dp, brush = glassConfig.borderBrush, shape = CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
