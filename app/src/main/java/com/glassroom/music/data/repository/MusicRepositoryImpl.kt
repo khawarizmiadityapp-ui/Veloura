@@ -2,17 +2,25 @@ package com.glassroom.music.data.repository
 
 import com.glassroom.music.data.local.LocalDataSource
 import com.glassroom.music.data.remote.NetworkClient
+import com.glassroom.music.data.remote.dto.LyricsDto
 import com.glassroom.music.data.remote.dto.SpotifyImportRequest
 import com.glassroom.music.data.remote.dto.TrackDto
+import com.glassroom.music.data.util.LyricsParser
 import com.glassroom.music.domain.model.*
 import com.glassroom.music.domain.repository.MusicRepository
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.URLEncoder
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class MusicRepositoryImpl(
     private val localDataSource: LocalDataSource
@@ -406,5 +414,101 @@ class MusicRepositoryImpl(
             streamUrl = dto.streamUrl ?: "",
             source = dto.source ?: "youtube"
         )
+    }
+
+    override suspend fun getLyrics(title: String, artist: String): Result<Lyrics> = withContext(Dispatchers.IO) {
+        if (title.isBlank()) return@withContext Result.failure(IllegalArgumentException("Title is empty"))
+
+        // 1. Try backend server if available
+        val candidateHosts = (listOf(NetworkClient.getBaseUrl()) + NetworkClient.candidateUrls).distinct()
+        for (host in candidateHosts) {
+            try {
+                val api = NetworkClient.getApiService(host)
+                val response = api.getLyrics(title = title, artist = artist)
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    val lines = LyricsParser.parse(body.syncedLyrics)
+                    return@withContext Result.success(
+                        Lyrics(
+                            trackTitle = body.trackName ?: title,
+                            artistName = body.artistName ?: artist,
+                            plainLyrics = body.plainLyrics,
+                            syncedLyrics = body.syncedLyrics,
+                            lines = lines
+                        )
+                    )
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        // 2. Direct fallback to LRCLIB (Directly works on-device even if local backend is offline)
+        try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
+                .build()
+
+            val cleanTitle = title.replace(Regex("""[\(\[\{].*?[\)\]\}]"""), "").trim()
+                .replace(Regex("""\b(feat|ft)\.?\s+.*$""", RegexOption.IGNORE_CASE), "").trim()
+            val cleanArtist = artist.replace(Regex("""[\(\[\{].*?[\)\]\}]"""), "").trim()
+
+            val encodedTitle = URLEncoder.encode(cleanTitle, "UTF-8")
+            val encodedArtist = URLEncoder.encode(cleanArtist, "UTF-8")
+
+            val getUrl = "https://lrclib.net/api/get?track_name=$encodedTitle&artist_name=$encodedArtist"
+            val request = Request.Builder()
+                .url(getUrl)
+                .header("User-Agent", "Veloura/1.0 (Android Music Player)")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful && response.body != null) {
+                val jsonStr = response.body!!.string()
+                val dto = Gson().fromJson(jsonStr, LyricsDto::class.java)
+                val lines = LyricsParser.parse(dto.syncedLyrics)
+                return@withContext Result.success(
+                    Lyrics(
+                        trackTitle = dto.trackName ?: title,
+                        artistName = dto.artistName ?: artist,
+                        plainLyrics = dto.plainLyrics,
+                        syncedLyrics = dto.syncedLyrics,
+                        lines = lines
+                    )
+                )
+            }
+
+            // 2b. Direct search fallback on LRCLIB
+            val searchQuery = "$cleanArtist $cleanTitle".trim()
+            val encodedQuery = URLEncoder.encode(searchQuery, "UTF-8")
+            val searchUrl = "https://lrclib.net/api/search?q=$encodedQuery"
+            val searchRequest = Request.Builder()
+                .url(searchUrl)
+                .header("User-Agent", "Veloura/1.0 (Android Music Player)")
+                .build()
+
+            val searchResponse = client.newCall(searchRequest).execute()
+            if (searchResponse.isSuccessful && searchResponse.body != null) {
+                val jsonStr = searchResponse.body!!.string()
+                val listType = object : TypeToken<List<LyricsDto>>() {}.type
+                val dtoList: List<LyricsDto>? = Gson().fromJson(jsonStr, listType)
+                val first = dtoList?.firstOrNull()
+                if (first != null) {
+                    val lines = LyricsParser.parse(first.syncedLyrics)
+                    return@withContext Result.success(
+                        Lyrics(
+                            trackTitle = first.trackName ?: title,
+                            artistName = first.artistName ?: artist,
+                            plainLyrics = first.plainLyrics,
+                            syncedLyrics = first.syncedLyrics,
+                            lines = lines
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        Result.failure(Exception("Lyrics not available for $title"))
     }
 }

@@ -33,4 +33,10 @@ interface MusicApiService {
 
     @GET("api/health")
     suspend fun healthCheck(): Response<Map<String, String>>
+
+    @GET("api/lyrics")
+    suspend fun getLyrics(
+        @Query("title") title: String,
+        @Query("artist") artist: String = ""
+    ): Response<LyricsDto>
 }

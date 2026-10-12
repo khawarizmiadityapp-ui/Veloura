@@ -1,5 +1,6 @@
 package com.glassroom.music.domain.repository
 
+import com.glassroom.music.domain.model.Lyrics
 import com.glassroom.music.domain.model.SpotifyImportState
 import com.glassroom.music.domain.model.Track
 import kotlinx.coroutines.flow.Flow
@@ -10,4 +11,5 @@ interface MusicRepository {
     suspend fun resolveStreamUrl(trackId: String, title: String = "", artist: String = ""): Result<String>
     suspend fun getRecommendations(): Result<Map<String, List<Track>>>
     fun importSpotifyPlaylist(urlOrId: String): Flow<SpotifyImportState>
+    suspend fun getLyrics(title: String, artist: String = ""): Result<Lyrics>
 }

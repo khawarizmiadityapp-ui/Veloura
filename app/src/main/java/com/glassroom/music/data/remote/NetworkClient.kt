@@ -7,14 +7,16 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
+    const val CLOUD_SERVER_URL = "https://veloura-lilac-sigma.vercel.app/"
     const val LAN_SERVER_URL = "http://10.117.54.56:5000/"
     const val ADB_REVERSE_URL = "http://127.0.0.1:5000/"
     const val EMULATOR_URL = "http://10.0.2.2:5000/"
 
-    // Default base URL now targets the LAN backend where the server runs
-    const val DEFAULT_BASE_URL = LAN_SERVER_URL
+    // Default base URL now uses user's deployed Vercel cloud server
+    const val DEFAULT_BASE_URL = CLOUD_SERVER_URL
 
     val candidateUrls = listOf(
+        CLOUD_SERVER_URL,
         LAN_SERVER_URL,
         ADB_REVERSE_URL,
         EMULATOR_URL
@@ -25,9 +27,9 @@ object NetworkClient {
 
     private val okHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .writeTimeout(25, TimeUnit.SECONDS)
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor.Level.BASIC

@@ -11,6 +11,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.glassroom.music.domain.model.Lyrics
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.domain.repository.MusicRepository
 import com.glassroom.music.domain.repository.PlaylistRepository
@@ -87,6 +88,15 @@ class PlayerManager(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _playbackError = MutableStateFlow<String?>(null)
+    val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
+
+    private val _lyrics = MutableStateFlow<Lyrics?>(null)
+    val lyrics: StateFlow<Lyrics?> = _lyrics.asStateFlow()
+
+    private val _isLyricsLoading = MutableStateFlow(false)
+    val isLyricsLoading: StateFlow<Boolean> = _isLyricsLoading.asStateFlow()
+
     private var progressJob: Job? = null
 
     private val playerListener = object : Player.Listener {
@@ -121,10 +131,11 @@ class PlayerManager(
         override fun onPlayerError(error: PlaybackException) {
             _isLoading.value = false
             _isPlaying.value = false
+            _playbackError.value = "Playback error: ${error.localizedMessage ?: "Stream tidak dapat diputar"}"
             // Fallback play next or try resolved alternative
             scope.launch {
                 // If stream failed, skip to next after brief delay
-                delay(1000)
+                delay(1500)
                 if (_queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
                     skipNext()
                 }
@@ -182,6 +193,10 @@ class PlayerManager(
         val track = currentList[index]
         _currentTrack.value = track
         _isLoading.value = true
+        _playbackError.value = null
+        _lyrics.value = null
+
+        fetchLyrics(track)
 
         scope.launch {
             // Save to recently played in local database
@@ -219,6 +234,7 @@ class PlayerManager(
             ) {
                 _isLoading.value = false
                 _isPlaying.value = false
+                _playbackError.value = "Koneksi ke backend audio gagal. Pastikan server backend sudah aktif (jalankan start_backend.bat) atau cek konfigurasi URL di Settings."
                 return@launch
             }
 
@@ -252,6 +268,19 @@ class PlayerManager(
         }
     }
 
+    fun clearPlaybackError() {
+        _playbackError.value = null
+    }
+
+    fun fetchLyrics(track: Track) {
+        scope.launch {
+            _isLyricsLoading.value = true
+            val res = musicRepository.getLyrics(track.title, track.artist)
+            _lyrics.value = res.getOrNull()
+            _isLyricsLoading.value = false
+        }
+    }
+
     fun togglePlayPause() {
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
@@ -260,8 +289,12 @@ class PlayerManager(
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0)
             }
-            exoPlayer.play()
-            _isPlaying.value = true
+            if (exoPlayer.mediaItemCount == 0 && _currentTrack.value != null) {
+                playCurrentIndex()
+            } else {
+                exoPlayer.play()
+                _isPlaying.value = true
+            }
         }
     }
 

@@ -291,41 +291,41 @@ def extract_stream_url(video_id):
         return STREAM_CACHE[clean_id]["url"], None
 
     last_err = ""
-    # Attempt 1: android & android_music client (most reliable on cloud datacenter IPs)
+    # Attempt 1: android_vr & android (best bypass for datacenter / cloud server IPs)
     try:
-        ydl_opts_android = {
+        ydl_opts_vr = {
             "quiet": True,
             "format": "ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android", "android_music", "android_creator"]}}
+            "extractor_args": {"youtube": {"player_client": ["android_vr", "android", "android_music"]}}
         }
-        with yt_dlp.YoutubeDL(ydl_opts_android) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_vr) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as e:
-        last_err = f"android: {e}"
+        last_err = f"android_vr: {e}"
 
-    # Attempt 2: tv_embedded & web_safari fallback
+    # Attempt 2: android_creator & tv_embedded fallback
     try:
-        ydl_opts_tv = {
+        ydl_opts_creator = {
             "quiet": True,
             "format": "ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_safari"]}}
+            "extractor_args": {"youtube": {"player_client": ["android_creator", "tv_embedded"]}}
         }
-        with yt_dlp.YoutubeDL(ydl_opts_tv) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_creator) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as ex:
-        last_err += f" | tv_embedded: {ex}"
+        last_err += f" | android_creator: {ex}"
 
     return None, last_err
 
@@ -344,7 +344,8 @@ def root():
             "health": "/api/health",
             "recommendations": "/api/recommendations",
             "search": "/api/search?q={query}",
-            "stream": "/api/stream/{track_id}"
+            "stream": "/api/stream/{track_id}",
+            "lyrics": "/api/lyrics?title={title}&artist={artist}"
         }
     })
 
@@ -501,6 +502,85 @@ def get_stream(track_id):
         "error": "Audio stream not found",
         "id": track_id,
         "detail": err or "No error returned"
+    }), 404
+
+LYRICS_CACHE = {}
+
+@app.route("/api/lyrics", methods=["GET"])
+@app.route("/lyrics", methods=["GET"])
+def get_lyrics():
+    title = request.args.get("title", "").strip()
+    artist = request.args.get("artist", "").strip()
+
+    if not title:
+        return jsonify({"error": "Title parameter is required"}), 400
+
+    clean_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).strip()
+    clean_artist = re.sub(r'[\(\[\{].*?[\)\]\}]', '', artist).strip()
+    # Remove "feat.", "ft.", etc. from title if present
+    clean_title = re.sub(r'\b(feat|ft)\.?\s+.*$', '', clean_title, flags=re.IGNORECASE).strip()
+
+    cache_key = f"{clean_title.lower()}__{clean_artist.lower()}"
+    if cache_key in LYRICS_CACHE:
+        return jsonify(LYRICS_CACHE[cache_key])
+
+    # 1. Try exact get from LRCLIB
+    try:
+        params = {"track_name": clean_title}
+        if clean_artist:
+            params["artist_name"] = clean_artist
+        query_str = urllib.parse.urlencode(params)
+        req = urllib.request.Request(
+            f"https://lrclib.net/api/get?{query_str}",
+            headers={"User-Agent": "Veloura/1.0 (Android Music Player)"}
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            result = {
+                "id": str(data.get("id", "")),
+                "trackName": data.get("trackName") or title,
+                "artistName": data.get("artistName") or artist,
+                "albumName": data.get("albumName") or "",
+                "duration": data.get("duration") or 0,
+                "plainLyrics": data.get("plainLyrics"),
+                "syncedLyrics": data.get("syncedLyrics")
+            }
+            LYRICS_CACHE[cache_key] = result
+            return jsonify(result)
+    except Exception:
+        pass
+
+    # 2. Fallback to LRCLIB search query
+    try:
+        search_query = f"{clean_artist} {clean_title}".strip() if clean_artist else clean_title
+        req = urllib.request.Request(
+            f"https://lrclib.net/api/search?q={urllib.parse.quote(search_query)}",
+            headers={"User-Agent": "Veloura/1.0 (Android Music Player)"}
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            search_data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(search_data, list) and len(search_data) > 0:
+                first = search_data[0]
+                result = {
+                    "id": str(first.get("id", "")),
+                    "trackName": first.get("trackName") or title,
+                    "artistName": first.get("artistName") or artist,
+                    "albumName": first.get("albumName") or "",
+                    "duration": first.get("duration") or 0,
+                    "plainLyrics": first.get("plainLyrics"),
+                    "syncedLyrics": first.get("syncedLyrics")
+                }
+                LYRICS_CACHE[cache_key] = result
+                return jsonify(result)
+    except Exception:
+        pass
+
+    return jsonify({
+        "error": "Lyrics not found",
+        "trackName": title,
+        "artistName": artist,
+        "plainLyrics": None,
+        "syncedLyrics": None
     }), 404
 
 @app.route("/api/recommendations", methods=["GET"])
