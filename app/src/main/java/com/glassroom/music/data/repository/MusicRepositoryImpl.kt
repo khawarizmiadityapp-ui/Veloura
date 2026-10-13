@@ -49,13 +49,13 @@ class MusicRepositoryImpl(
             source = "youtube"
         ),
         Track(
-            id = "d5gf9dXHeG4",
+            id = "d5gf9dXbPi0",
             title = "Birds of a Feather",
             artist = "Billie Eilish",
             album = "Hit Me Hard and Soft",
-            thumbnail = "https://i.ytimg.com/vi/d5gf9dXHeG4/hqdefault.jpg",
-            duration = 198,
-            streamUrl = "/api/stream/d5gf9dXHeG4",
+            thumbnail = "https://i.ytimg.com/vi/d5gf9dXbPi0/hqdefault.jpg",
+            duration = 212,
+            streamUrl = "/api/stream/d5gf9dXbPi0",
             source = "youtube"
         ),
         Track(
@@ -129,13 +129,13 @@ class MusicRepositoryImpl(
             source = "youtube"
         ),
         Track(
-            id = "g46u-5aJ32g",
+            id = "7Jm2Il2U-c0",
             title = "Satu Bulan",
             artist = "Bernadya",
             album = "Sialnya, Hidup Harus Tetap Berjalan",
-            thumbnail = "https://i.ytimg.com/vi/g46u-5aJ32g/hqdefault.jpg",
-            duration = 195,
-            streamUrl = "/api/stream/g46u-5aJ32g",
+            thumbnail = "https://i.ytimg.com/vi/7Jm2Il2U-c0/hqdefault.jpg",
+            duration = 199,
+            streamUrl = "/api/stream/7Jm2Il2U-c0",
             source = "youtube"
         ),
         Track(
@@ -215,11 +215,14 @@ class MusicRepositoryImpl(
                     artist = artist.ifBlank { null }
                 )
                 if (response.isSuccessful && response.body()?.streamUrl != null) {
-                    val url = response.body()!!.streamUrl!!
+                    var url = response.body()!!.streamUrl!!
+                    if (url.startsWith("/")) {
+                        url = "${host.trimEnd('/')}$url"
+                    }
                     if (url.startsWith("http") &&
-                        !url.contains("/api/stream") &&
                         !url.contains("commondatastorage.googleapis.com") &&
-                        !url.contains("codeskulptor")
+                        !url.contains("codeskulptor") &&
+                        (!url.contains("/api/stream") || url.contains("/api/stream/audio"))
                     ) {
                         NetworkClient.updateBaseUrl(host)
                         return@withContext Result.success(url)

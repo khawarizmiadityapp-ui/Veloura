@@ -47,13 +47,24 @@ class PlayerManager(
         }
     }
 
+    @OptIn(UnstableApi::class)
     val exoPlayer: ExoPlayer by lazy {
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(20000)
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+
         ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true) // true handles audio focus automatically
             .setHandleAudioBecomingNoisy(true) // pauses when headphones unplugged
             .build().apply {
@@ -203,20 +214,19 @@ class PlayerManager(
             playlistRepository.addToRecentlyPlayed(track)
 
             // Resolve direct stream URL via repository/backend
-            val isDirectCdn = track.streamUrl.isNotBlank() &&
+            val isDirectPlayable = track.streamUrl.isNotBlank() &&
                     track.streamUrl.startsWith("http") &&
-                    !track.streamUrl.contains("/api/stream") &&
                     !track.streamUrl.contains("commondatastorage.googleapis.com") &&
-                    !track.streamUrl.contains("codeskulptor")
+                    !track.streamUrl.contains("codeskulptor") &&
+                    (!track.streamUrl.contains("/api/stream") || track.streamUrl.contains("/api/stream/audio"))
 
-            val resolvedUrl = if (isDirectCdn) {
+            val resolvedUrl = if (isDirectPlayable) {
                 track.streamUrl
             } else {
                 val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
                 val direct = res.getOrNull()
                 if (!direct.isNullOrBlank() &&
                     direct.startsWith("http") &&
-                    !direct.contains("/api/stream") &&
                     !direct.contains("commondatastorage.googleapis.com") &&
                     !direct.contains("codeskulptor")
                 ) {

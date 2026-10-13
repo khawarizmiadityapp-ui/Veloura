@@ -46,7 +46,9 @@ LEGACY_ID_MAP = {
     "track_3": "dX3k_QDnzHE",
     "track_4": "H5v3kku4y6Q",
     "track_5": "5NV6Rdv1a3I",
-    "track_6": "TUVcZfQe-Kw"
+    "track_6": "TUVcZfQe-Kw",
+    "d5gf9dXHeG4": "d5gf9dXbPi0",
+    "g46u-5aJ32g": "7Jm2Il2U-c0"
 }
 
 # Curated tracks with REAL YouTube video IDs matching the actual songs
@@ -72,13 +74,13 @@ CURATED_TRACKS = [
         "source": "youtube"
     },
     {
-        "id": "d5gf9dXHeG4",
+        "id": "d5gf9dXbPi0",
         "title": "Birds of a Feather",
         "artist": "Billie Eilish",
         "album": "Hit Me Hard and Soft",
-        "thumbnail": "https://i.ytimg.com/vi/d5gf9dXHeG4/hqdefault.jpg",
-        "duration": 198,
-        "streamUrl": "/api/stream/d5gf9dXHeG4",
+        "thumbnail": "https://i.ytimg.com/vi/d5gf9dXbPi0/hqdefault.jpg",
+        "duration": 212,
+        "streamUrl": "/api/stream/d5gf9dXbPi0",
         "source": "youtube"
     },
     {
@@ -152,13 +154,13 @@ CURATED_TRACKS = [
         "source": "youtube"
     },
     {
-        "id": "g46u-5aJ32g",
+        "id": "7Jm2Il2U-c0",
         "title": "Satu Bulan",
         "artist": "Bernadya",
         "album": "Sialnya, Hidup Harus Tetap Berjalan",
-        "thumbnail": "https://i.ytimg.com/vi/g46u-5aJ32g/hqdefault.jpg",
-        "duration": 195,
-        "streamUrl": "/api/stream/g46u-5aJ32g",
+        "thumbnail": "https://i.ytimg.com/vi/7Jm2Il2U-c0/hqdefault.jpg",
+        "duration": 199,
+        "streamUrl": "/api/stream/7Jm2Il2U-c0",
         "source": "youtube"
     },
     {
@@ -474,10 +476,13 @@ def get_stream(track_id):
         
     stream_url, err = extract_stream_url(clean_id)
     if stream_url:
+        host = request.host_url.rstrip("/")
+        proxy_url = f"{host}/api/stream/audio/{clean_id}"
         return jsonify({
             "id": track_id,
             "youtubeId": clean_id,
-            "streamUrl": stream_url,
+            "streamUrl": proxy_url,
+            "directUrl": stream_url,
             "format": "m4a",
             "source": "youtube"
         })
@@ -490,10 +495,13 @@ def get_stream(track_id):
             fallback_id = found[0]["id"]
             fallback_url, _ = extract_stream_url(fallback_id)
             if fallback_url:
+                host = request.host_url.rstrip("/")
+                proxy_url = f"{host}/api/stream/audio/{fallback_id}"
                 return jsonify({
                     "id": track_id,
                     "youtubeId": fallback_id,
-                    "streamUrl": fallback_url,
+                    "streamUrl": proxy_url,
+                    "directUrl": fallback_url,
                     "format": "m4a",
                     "source": "youtube"
                 })
@@ -503,6 +511,62 @@ def get_stream(track_id):
         "id": track_id,
         "detail": err or "No error returned"
     }), 404
+
+@app.route("/api/stream/audio/<path:track_id>", methods=["GET", "HEAD"])
+@app.route("/stream/audio/<path:track_id>", methods=["GET", "HEAD"])
+def proxy_audio_stream(track_id):
+    clean_id = track_id
+    if clean_id.startswith("api/stream/"):
+        clean_id = clean_id.replace("api/stream/", "")
+    elif clean_id.startswith("stream/"):
+        clean_id = clean_id.replace("stream/", "")
+    clean_id = re.sub(r'_sp_\d+', '', clean_id)
+    clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
+
+    stream_url, err = extract_stream_url(clean_id)
+    if not stream_url:
+        return jsonify({"error": "Audio stream not found", "id": track_id, "detail": err}), 404
+
+    req_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    }
+    range_header = request.headers.get("Range")
+    if range_header:
+        req_headers["Range"] = range_header
+
+    try:
+        req = urllib.request.Request(stream_url, headers=req_headers)
+        upstream_resp = urllib.request.urlopen(req, timeout=15)
+        
+        status_code = upstream_resp.status
+        content_type = upstream_resp.headers.get("Content-Type", "audio/mp4")
+        content_length = upstream_resp.headers.get("Content-Length")
+        content_range = upstream_resp.headers.get("Content-Range")
+
+        def generate():
+            try:
+                while True:
+                    chunk = upstream_resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+            except Exception:
+                pass
+            finally:
+                try:
+                    upstream_resp.close()
+                except Exception:
+                    pass
+
+        resp = Response(generate(), status=status_code, content_type=content_type)
+        resp.headers["Accept-Ranges"] = "bytes"
+        if content_length:
+            resp.headers["Content-Length"] = content_length
+        if content_range:
+            resp.headers["Content-Range"] = content_range
+        return resp
+    except Exception as e:
+        return jsonify({"error": "Proxy audio stream failed", "detail": str(e)}), 502
 
 LYRICS_CACHE = {}
 
