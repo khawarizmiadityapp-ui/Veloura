@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -142,10 +143,10 @@ fun PlaylistsScreen(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(
+                            itemsIndexed(
                                 items = spotifyPlaylists,
-                                key = { it.id }
-                            ) { p ->
+                                key = { index, p -> "spotify_pl_${p.id}_$index" }
+                            ) { _, p ->
                                 GlassPlaylistCard(
                                     playlist = p,
                                     onClick = { onPlaylistClick(p) },
@@ -165,10 +166,10 @@ fun PlaylistsScreen(
                             subtitle = "Mixes created on Veloura"
                         )
                     }
-                    items(
+                    itemsIndexed(
                         items = localPlaylists,
-                        key = { it.id }
-                    ) { p ->
+                        key = { index, p -> "local_pl_${p.id}_$index" }
+                    ) { _, p ->
                         Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
                             GlassCard(
                                 onClick = { onPlaylistClick(p) },

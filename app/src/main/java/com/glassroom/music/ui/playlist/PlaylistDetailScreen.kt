@@ -225,7 +225,7 @@ fun PlaylistDetailScreen(
                 // Track Items
                 itemsIndexed(
                     items = tracks,
-                    key = { _, track -> track.id }
+                    key = { index, track -> "detail_track_${track.id}_$index" }
                 ) { _, track ->
                     Box(modifier = Modifier.padding(vertical = 4.dp)) {
                         GlassSongCard(

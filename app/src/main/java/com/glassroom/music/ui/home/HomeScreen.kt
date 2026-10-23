@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -147,10 +148,10 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiState.recentlyPlayed,
-                        key = { it.id }
-                    ) { track ->
+                        key = { index, track -> "recent_${track.id}_$index" }
+                    ) { _, track ->
                         GlassPlaylistCard(
                             playlist = Playlist(
                                 id = track.id,
@@ -179,10 +180,10 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiState.madeForYou,
-                        key = { it.id }
-                    ) { track ->
+                        key = { index, track -> "made_for_you_${track.id}_$index" }
+                    ) { _, track ->
                         GlassPlaylistCard(
                             playlist = Playlist(
                                 id = track.id,
@@ -214,10 +215,10 @@ fun HomeScreen(
                 }
             }
         } else {
-            items(
+            itemsIndexed(
                 items = uiState.popularSongs,
-                key = { it.id }
-            ) { track ->
+                key = { index, track -> "popular_${track.id}_$index" }
+            ) { _, track ->
                 Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     GlassSongCard(
                         track = track,
@@ -243,10 +244,10 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiState.userPlaylists,
-                        key = { it.id }
-                    ) { playlist ->
+                        key = { index, playlist -> "user_pl_${playlist.id}_$index" }
+                    ) { _, playlist ->
                         GlassPlaylistCard(
                             playlist = playlist,
                             onClick = { onPlaylistClick(playlist) },
@@ -269,10 +270,10 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiState.importedPlaylists,
-                        key = { it.id }
-                    ) { playlist ->
+                        key = { index, playlist -> "imported_pl_${playlist.id}_$index" }
+                    ) { _, playlist ->
                         GlassPlaylistCard(
                             playlist = playlist,
                             onClick = { onPlaylistClick(playlist) },
@@ -292,10 +293,10 @@ fun HomeScreen(
                     subtitle = "Fresh sounds picked for this session"
                 )
             }
-            items(
+            itemsIndexed(
                 items = uiState.trending,
-                key = { it.id }
-            ) { track ->
+                key = { index, track -> "trending_${track.id}_$index" }
+            ) { _, track ->
                 Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     GlassSongCard(
                         track = track,

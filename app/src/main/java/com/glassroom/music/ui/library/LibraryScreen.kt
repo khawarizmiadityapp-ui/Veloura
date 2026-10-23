@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -165,10 +166,10 @@ fun LibraryScreen(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(
+                        itemsIndexed(
                             items = uiState.playlists,
-                            key = { it.id }
-                        ) { playlist ->
+                            key = { index, playlist -> "lib_pl_${playlist.id}_$index" }
+                        ) { _, playlist ->
                             GlassCard(
                                 onClick = { onPlaylistClick(playlist) },
                                 modifier = Modifier.fillMaxWidth()
@@ -213,10 +214,10 @@ private fun TrackList(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(
+        itemsIndexed(
             items = tracks,
-            key = { it.id }
-        ) { track ->
+            key = { index, track -> "lib_track_${track.id}_$index" }
+        ) { _, track ->
             GlassSongCard(
                 track = track,
                 isPlaying = currentPlayingTrack?.id == track.id && isPlaying,

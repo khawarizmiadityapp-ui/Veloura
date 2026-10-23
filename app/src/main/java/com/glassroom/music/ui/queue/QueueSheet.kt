@@ -162,7 +162,10 @@ fun QueueSheet(
                             )
                         }
                     } else {
-                        itemsIndexed(upcomingTracks) { offset, track ->
+                        itemsIndexed(
+                            items = upcomingTracks,
+                            key = { offset, track -> "queue_${track.id}_$offset" }
+                        ) { offset, track ->
                             val actualIndex = currentIndex + 1 + offset
                             GlassSongCard(
                                 track = track,
