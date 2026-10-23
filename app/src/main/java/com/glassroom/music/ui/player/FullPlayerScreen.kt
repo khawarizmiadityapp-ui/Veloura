@@ -5,6 +5,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -30,7 +34,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.playback.GlassRepeatMode
 import com.glassroom.music.playback.PlayerManager
@@ -38,13 +44,16 @@ import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.queue.QueueSheet
 import com.glassroom.music.ui.theme.*
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun FullPlayerScreen(
     playerManager: PlayerManager,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onCollapse: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val currentTrack by playerManager.currentTrack.collectAsState()
     val isPlaying by playerManager.isPlaying.collectAsState()
@@ -56,6 +65,7 @@ fun FullPlayerScreen(
     val currentIndex by playerManager.currentIndex.collectAsState()
     val lyrics by playerManager.lyrics.collectAsState()
     val isLyricsLoading by playerManager.isLyricsLoading.collectAsState()
+    val isLoading by playerManager.isLoading.collectAsState()
     val playbackError by playerManager.playbackError.collectAsState()
 
     var showQueueSheet by remember { mutableStateOf(false) }
@@ -65,7 +75,7 @@ fun FullPlayerScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "artwork_float")
     val artworkScale by infiniteTransition.animateFloat(
         initialValue = if (isPlaying) 1.0f else 0.98f,
-        targetValue = if (isPlaying) 1.03f else 0.98f,
+        targetValue = if (isPlaying) 1.025f else 0.98f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 3000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -73,7 +83,29 @@ fun FullPlayerScreen(
         label = "scale_anim"
     )
 
+    // Swipe down to collapse gesture
+    val swipeDownState = rememberDraggableState { delta ->
+        if (delta > 16) { // User swiped down
+            onCollapse()
+        }
+    }
+
     val glassConfig = LocalGlassConfig.current
+
+    // Artwork shared element modifier
+    val artworkSharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+        with(sharedTransitionScope) {
+            Modifier.sharedElement(
+                state = rememberSharedContentState(key = "track_artwork"),
+                animatedVisibilityScope = animatedVisibilityScope,
+                boundsTransform = { _, _ ->
+                    tween(durationMillis = 380, easing = FastOutSlowInEasing)
+                }
+            )
+        }
+    } else {
+        Modifier
+    }
 
     if (currentTrack == null) {
         Box(
@@ -92,7 +124,10 @@ fun FullPlayerScreen(
             .fillMaxSize()
     ) {
         // Atmospheric glowing backdrop
-        VelouraBackdrop()
+        VelouraBackdrop(
+            currentTrack = currentTrack,
+            isPlaying = isPlaying
+        )
 
         // Soft ambient glow background circle behind artwork
         Box(
@@ -121,9 +156,11 @@ fun FullPlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Bar: Collapse arrow down, playing from indicator, Queue button
+            // Top Bar: Collapse arrow down, playing from indicator, Queue button (draggable downwards to collapse)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .draggable(state = swipeDownState, orientation = Orientation.Vertical),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -135,7 +172,21 @@ fun FullPlayerScreen(
                     contentDescription = "Collapse Player"
                 )
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clickable(onClick = onCollapse)
+                        .padding(horizontal = 8.dp)
+                ) {
+                    // Subtle drag handle pill
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x2A0F172A))
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "PLAYING FROM",
                         style = GlassTypography.labelSmall,
@@ -252,7 +303,7 @@ fun FullPlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
-                            modifier = Modifier
+                            modifier = artworkSharedModifier
                                 .size(285.dp)
                                 .scale(artworkScale)
                                 .shadow(
@@ -274,14 +325,47 @@ fun FullPlayerScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(26.dp))
-                                    .background(if (glassConfig.isDark) Color(0xFF1E2638) else Color(0xFFE2E8F0))
+                                    .background(if (glassConfig.isDark) Color(0xFF1E2638) else Color(0xFFE2E8F0)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                AsyncImage(
-                                    model = currentTrack?.thumbnail,
-                                    contentDescription = currentTrack?.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                AnimatedContent(
+                                    targetState = currentTrack?.thumbnail,
+                                    transitionSpec = {
+                                        fadeIn(tween(350)) togetherWith fadeOut(tween(250))
+                                    },
+                                    label = "full_artwork_crossfade"
+                                ) { thumb ->
+                                    if (!thumb.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(thumb)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = currentTrack?.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    Brush.radialGradient(
+                                                        colors = if (glassConfig.isDark) listOf(Color(0xFF26324A), Color(0xFF161F30))
+                                                        else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
+                                                    )
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                                modifier = Modifier.size(64.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -290,28 +374,38 @@ fun FullPlayerScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Track Title, Artist & Favorite Button
+            // Track Title, Artist & Favorite Button with smooth animation on change
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = currentTrack?.title ?: "",
-                        style = GlassTypography.headlineLarge,
-                        color = glassConfig.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = currentTrack?.artist ?: "",
-                        style = GlassTypography.bodyLarge,
-                        color = glassConfig.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                AnimatedContent(
+                    targetState = (currentTrack?.title ?: "") to (currentTrack?.artist ?: ""),
+                    transitionSpec = {
+                        (slideInVertically(animationSpec = tween(280)) { height -> height / 2 } + fadeIn(tween(280)))
+                            .togetherWith(slideOutVertically(animationSpec = tween(220)) { height -> -height / 2 } + fadeOut(tween(220)))
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = "full_metadata_anim"
+                ) { (title, artist) ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = title,
+                            style = GlassTypography.headlineLarge,
+                            color = glassConfig.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = artist,
+                            style = GlassTypography.bodyLarge,
+                            color = glassConfig.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 val favScale by animateFloatAsState(
@@ -343,7 +437,7 @@ fun FullPlayerScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Seekbar
+            // Seekbar with smoothly animated thumb and track
             GlassSlider(
                 positionMs = currentPosition,
                 durationMs = duration,
@@ -352,11 +446,12 @@ fun FullPlayerScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Playback Controls
+            // Playback Controls with loading indicator and debounced taps
             GlassPlayerControl(
                 isPlaying = isPlaying,
                 isShuffle = isShuffle,
                 repeatMode = repeatMode,
+                isLoading = isLoading,
                 onPlayPause = { playerManager.togglePlayPause() },
                 onPrevious = { playerManager.skipPrevious() },
                 onNext = { playerManager.skipNext() },

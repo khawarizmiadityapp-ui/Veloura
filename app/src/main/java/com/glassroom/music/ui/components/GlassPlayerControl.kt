@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import com.glassroom.music.playback.GlassRepeatMode
 import com.glassroom.music.ui.theme.*
 
+import androidx.compose.material3.CircularProgressIndicator
+
 @Composable
 fun GlassPlayerControl(
     isPlaying: Boolean,
@@ -37,9 +39,38 @@ fun GlassPlayerControl(
     onNext: () -> Unit,
     onToggleShuffle: () -> Unit,
     onToggleRepeat: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
 ) {
     val glassConfig = LocalGlassConfig.current
+
+    // Rapid click debouncing for responsive yet stable playback controls
+    var lastActionTime by remember { mutableLongStateOf(0L) }
+    val debounceMs = 280L
+
+    val safeOnPlayPause = {
+        val now = System.currentTimeMillis()
+        if (now - lastActionTime > debounceMs) {
+            lastActionTime = now
+            onPlayPause()
+        }
+    }
+
+    val safeOnPrevious = {
+        val now = System.currentTimeMillis()
+        if (now - lastActionTime > debounceMs) {
+            lastActionTime = now
+            onPrevious()
+        }
+    }
+
+    val safeOnNext = {
+        val now = System.currentTimeMillis()
+        if (now - lastActionTime > debounceMs) {
+            lastActionTime = now
+            onNext()
+        }
+    }
 
     // Spring press animation for play button
     val playInteractionSource = remember { MutableInteractionSource() }
@@ -116,7 +147,7 @@ fun GlassPlayerControl(
         // Previous Button
         GlassIconButton(
             icon = Icons.Filled.SkipPrevious,
-            onClick = onPrevious,
+            onClick = safeOnPrevious,
             size = 52.dp,
             iconSize = 28.dp,
             tint = glassConfig.textPrimary,
@@ -185,23 +216,42 @@ fun GlassPlayerControl(
                     .clickable(
                         interactionSource = playInteractionSource,
                         indication = null,
-                        onClick = onPlayPause
+                        onClick = safeOnPlayPause
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
-                    targetState = isPlaying,
+                    targetState = if (isLoading) "loading" else if (isPlaying) "pause" else "play",
                     transitionSpec = {
                         scaleIn(tween(200)) togetherWith scaleOut(tween(150))
                     },
                     label = "play_pause_switch"
-                ) { playing ->
-                    Icon(
-                        imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playing) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                ) { state ->
+                    when (state) {
+                        "loading" -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = Color.White,
+                                strokeWidth = 2.5.dp
+                            )
+                        }
+                        "pause" -> {
+                            Icon(
+                                imageVector = Icons.Filled.Pause,
+                                contentDescription = "Pause",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                        else -> {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -209,7 +259,7 @@ fun GlassPlayerControl(
         // Next Button
         GlassIconButton(
             icon = Icons.Filled.SkipNext,
-            onClick = onNext,
+            onClick = safeOnNext,
             size = 52.dp,
             iconSize = 28.dp,
             tint = glassConfig.textPrimary,

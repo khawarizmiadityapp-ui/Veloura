@@ -60,7 +60,7 @@ fun SettingsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 150.dp)
         ) {
             // Appearance Section
             item {
@@ -108,9 +108,9 @@ fun SettingsScreen(
                         // Glassroom Intensity Feature (Seberapa Kaca / Transparan)
                         val intensityPercent = (glassIntensity * 100).toInt()
                         val intensityLabel = when {
-                            glassIntensity < 0.45f -> "Ultra Crystal (Sangat Bening)"
-                            glassIntensity < 0.82f -> "Frosted Glass (Kaca Buram Elegan)"
-                            else -> "Milky Glass (Kaca Pekat)"
+                            glassIntensity < 0.45f -> "Ultra Crystal (Bening)"
+                            glassIntensity < 0.82f -> "Frosted Glass (Buram Elegan)"
+                            else -> "Milky Glass (Pekat)"
                         }
 
                         Row(
@@ -142,8 +142,8 @@ fun SettingsScreen(
                             },
                             valueRange = 0.25f..0.95f,
                             colors = androidx.compose.material3.SliderDefaults.colors(
-                                thumbColor = if (glassConfig.isDark) Color.White else Color(0xFF2C3E50),
-                                activeTrackColor = if (glassConfig.isDark) Color.White else Color(0xFF2C3E50),
+                                thumbColor = if (glassConfig.isDark) Color.White else Color(0xFF1E293B),
+                                activeTrackColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF1E293B),
                                 inactiveTrackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x260F172A)
                             ),
                             modifier = Modifier.fillMaxWidth()
@@ -200,7 +200,7 @@ fun SettingsScreen(
                                 .padding(12.dp)
                         ) {
                             Text(
-                                text = "Kaca Glassroom: Transparan, halus, & berkedalaman",
+                                text = "Kaca Glassroom: Transparan, halus, & berkedalaman optik",
                                 style = GlassTypography.bodyMedium,
                                 color = glassConfig.textPrimary
                             )
@@ -247,30 +247,31 @@ fun SettingsScreen(
                         Text(
                             text = "Audio Backend API URL",
                             style = GlassTypography.titleMedium,
-                            color = GlassTextPrimary
+                            color = glassConfig.textPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Runs yt-dlp on your machine/server and streams audio",
                             style = GlassTypography.labelSmall,
-                            color = GlassTextSecondary
+                            color = glassConfig.textSecondary
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0x66FFFFFF))
-                                .border(1.dp, GlassBorderWhite, RoundedCornerShape(16.dp))
+                                .background(inputBg)
+                                .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(16.dp))
                                 .padding(horizontal = 14.dp, vertical = 12.dp)
                         ) {
                             BasicTextField(
                                 value = editingUrl,
                                 onValueChange = { editingUrl = it },
                                 singleLine = true,
-                                textStyle = GlassTypography.bodyLarge.copy(color = GlassTextPrimary),
-                                cursorBrush = SolidColor(GlassTextPrimary),
+                                textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                                cursorBrush = SolidColor(glassConfig.textPrimary),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -308,7 +309,7 @@ fun SettingsScreen(
                                 Text(
                                     text = connectionStatus!!,
                                     style = GlassTypography.labelSmall,
-                                    color = if (connectionStatus!!.startsWith("Connected")) GlassAccentMint else GlassTextSecondary,
+                                    color = if (connectionStatus!!.startsWith("Connected")) GlassAccentMint else glassConfig.textSecondary,
                                     fontSize = 11.sp
                                 )
                             }
@@ -384,7 +385,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(120.dp))
             }
         }
     }
@@ -398,6 +398,7 @@ private fun SettingToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val glassConfig = LocalGlassConfig.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -405,7 +406,7 @@ private fun SettingToggleRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = GlassTextPrimary,
+            tint = glassConfig.textPrimary,
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(14.dp))
@@ -413,12 +414,12 @@ private fun SettingToggleRow(
             Text(
                 text = title,
                 style = GlassTypography.titleMedium,
-                color = GlassTextPrimary
+                color = glassConfig.textPrimary
             )
             Text(
                 text = subtitle,
                 style = GlassTypography.labelSmall,
-                color = GlassTextSecondary
+                color = glassConfig.textSecondary
             )
         }
         Switch(
@@ -426,9 +427,9 @@ private fun SettingToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF2C3E50),
-                uncheckedThumbColor = Color(0xFF94A3B8),
-                uncheckedTrackColor = Color(0x330F172A)
+                checkedTrackColor = if (glassConfig.isDark) GlassAccentCobalt else Color(0xFF1E293B),
+                uncheckedThumbColor = if (glassConfig.isDark) Color(0xFF64748B) else Color(0xFF94A3B8),
+                uncheckedTrackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x260F172A)
             )
         )
     }

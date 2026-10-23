@@ -109,6 +109,8 @@ class PlayerManager(
     val isLyricsLoading: StateFlow<Boolean> = _isLyricsLoading.asStateFlow()
 
     private var progressJob: Job? = null
+    private var playJob: Job? = null
+    private var lyricsJob: Job? = null
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -209,7 +211,8 @@ class PlayerManager(
 
         fetchLyrics(track)
 
-        scope.launch {
+        playJob?.cancel()
+        playJob = scope.launch {
             // Save to recently played in local database
             playlistRepository.addToRecentlyPlayed(track)
 
@@ -283,7 +286,8 @@ class PlayerManager(
     }
 
     fun fetchLyrics(track: Track) {
-        scope.launch {
+        lyricsJob?.cancel()
+        lyricsJob = scope.launch {
             _isLyricsLoading.value = true
             val res = musicRepository.getLyrics(track.title, track.artist)
             _lyrics.value = res.getOrNull()
@@ -393,12 +397,15 @@ class PlayerManager(
     }
 
     fun clearQueue() {
+        playJob?.cancel()
+        lyricsJob?.cancel()
         _queue.value = emptyList()
         _currentTrack.value = null
         _currentIndex.value = 0
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         _isPlaying.value = false
+        _isLoading.value = false
     }
 
     private fun handleTrackEnded() {
@@ -422,6 +429,8 @@ class PlayerManager(
     }
 
     fun release() {
+        playJob?.cancel()
+        lyricsJob?.cancel()
         progressJob?.cancel()
         exoPlayer.removeListener(playerListener)
         exoPlayer.release()

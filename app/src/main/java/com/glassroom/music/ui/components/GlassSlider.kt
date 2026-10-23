@@ -1,9 +1,11 @@
 package com.glassroom.music.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -26,11 +28,21 @@ fun GlassSlider(
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val glassConfig = LocalGlassConfig.current
     var isDragging by remember { mutableStateOf(false) }
-    var dragPosition by remember { mutableStateOf(0f) }
+    var dragPosition by remember { mutableFloatStateOf(0f) }
 
     val safeDuration = durationMs.coerceAtLeast(1L).toFloat()
-    val sliderValue = if (isDragging) dragPosition else (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
+    val rawProgress = (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
+
+    // Smoothly interpolate progress when not actively dragging
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+        label = "slider_progress_anim"
+    )
+
+    val sliderValue = if (isDragging) dragPosition else animatedProgress
 
     val currentSeconds = if (isDragging) {
         ((dragPosition * safeDuration) / 1000).toInt()
@@ -46,6 +58,9 @@ fun GlassSlider(
         return "%d:%02d".format(m, s)
     }
 
+    val activeColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF1E293B)
+    val inactiveColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x1F0F172A)
+
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
             value = sliderValue,
@@ -59,17 +74,17 @@ fun GlassSlider(
                 onSeek(targetMs)
             },
             colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF2C3E50),
-                activeTrackColor = Color(0xFF2C3E50),
-                inactiveTrackColor = Color(0x330F172A)
+                thumbColor = activeColor,
+                activeTrackColor = activeColor,
+                inactiveTrackColor = inactiveColor
             ),
             thumb = {
                 Box(
                     modifier = Modifier
                         .size(14.dp)
-                        .shadow(4.dp, CircleShape, ambientColor = Color(0x33000000))
+                        .shadow(4.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x6638BDF8) else Color(0x33000000))
                         .clip(CircleShape)
-                        .background(Color(0xFF2C3E50))
+                        .background(activeColor)
                 )
             },
             track = { sliderState ->
@@ -77,8 +92,8 @@ fun GlassSlider(
                     sliderState = sliderState,
                     modifier = Modifier.height(4.dp),
                     colors = SliderDefaults.colors(
-                        activeTrackColor = Color(0xFF2C3E50),
-                        inactiveTrackColor = Color(0x260F172A)
+                        activeTrackColor = activeColor,
+                        inactiveTrackColor = inactiveColor
                     )
                 )
             },
@@ -97,13 +112,13 @@ fun GlassSlider(
             Text(
                 text = formatTime(currentSeconds),
                 style = GlassTypography.labelSmall,
-                color = GlassTextTertiary,
+                color = glassConfig.textTertiary,
                 fontSize = 11.sp
             )
             Text(
                 text = formatTime(totalSeconds),
                 style = GlassTypography.labelSmall,
-                color = GlassTextTertiary,
+                color = glassConfig.textTertiary,
                 fontSize = 11.sp
             )
         }

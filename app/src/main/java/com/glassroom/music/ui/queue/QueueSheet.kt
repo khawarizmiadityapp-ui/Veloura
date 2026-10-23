@@ -42,11 +42,12 @@ fun QueueSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val glassConfig = LocalGlassConfig.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xF7FFFFFF),
+        containerColor = if (glassConfig.isDark) Color(0xF2121824) else Color(0xF7FFFFFF),
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         dragHandle = {
             Box(
@@ -55,7 +56,7 @@ fun QueueSheet(
                     .width(44.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(Color(0x330F172A))
+                    .background(if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x330F172A))
             )
         }
     ) {
@@ -77,12 +78,12 @@ fun QueueSheet(
                     Text(
                         text = "Play Queue",
                         style = GlassTypography.headlineMedium,
-                        color = GlassTextPrimary
+                        color = glassConfig.textPrimary
                     )
                     Text(
                         text = "${queue.size} songs in line",
                         style = GlassTypography.labelSmall,
-                        color = GlassTextTertiary
+                        color = glassConfig.textTertiary
                     )
                 }
 
@@ -111,7 +112,7 @@ fun QueueSheet(
                 Text(
                     text = "Now Playing",
                     style = GlassTypography.titleMedium,
-                    color = GlassTextSecondary,
+                    color = glassConfig.textSecondary,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
                 GlassSongCard(
@@ -126,7 +127,7 @@ fun QueueSheet(
             Text(
                 text = "Up Next",
                 style = GlassTypography.titleMedium,
-                color = GlassTextSecondary,
+                color = glassConfig.textSecondary,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
 
@@ -138,24 +139,36 @@ fun QueueSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No more songs in queue",
+                        text = "No upcoming tracks in queue",
                         style = GlassTypography.bodyMedium,
-                        color = GlassTextTertiary
+                        color = glassConfig.textTertiary
                     )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 30.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    itemsIndexed(queue) { index, track ->
-                        if (index != currentIndex) {
+                    val upcomingTracks = queue.filterIndexed { index, _ -> index > currentIndex }
+
+                    if (upcomingTracks.isEmpty()) {
+                        item {
+                            Text(
+                                text = "End of queue reached",
+                                style = GlassTypography.bodyMedium,
+                                color = glassConfig.textTertiary,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    } else {
+                        itemsIndexed(upcomingTracks) { offset, track ->
+                            val actualIndex = currentIndex + 1 + offset
                             GlassSongCard(
                                 track = track,
                                 isPlaying = false,
-                                onClick = { onTrackSelect(index) },
-                                onMoreClick = { onRemoveFromQueue(index) }
+                                onClick = { onTrackSelect(actualIndex) },
+                                onMoreClick = { onRemoveFromQueue(actualIndex) }
                             )
                         }
                     }

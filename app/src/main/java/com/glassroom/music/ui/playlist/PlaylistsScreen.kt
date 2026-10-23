@@ -6,9 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -27,10 +24,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.glassroom.music.domain.model.*
 import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.home.SectionHeader
@@ -43,6 +46,7 @@ fun PlaylistsScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val glassConfig = LocalGlassConfig.current
 
     var newPlaylistName by remember { mutableStateOf("") }
     var newPlaylistDesc by remember { mutableStateOf("") }
@@ -92,56 +96,80 @@ fun PlaylistsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Outlined.LibraryMusic,
-                        contentDescription = null,
-                        tint = GlassTextTertiary,
-                        modifier = Modifier.size(56.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .shadow(6.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A))
+                            .clip(CircleShape)
+                            .background(brush = glassConfig.cardBrush)
+                            .border(1.dp, glassConfig.borderBrush, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.LibraryMusic,
+                            contentDescription = null,
+                            tint = glassConfig.textTertiary,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "No music here yet",
                         style = GlassTypography.headlineMedium,
-                        color = GlassTextPrimary
+                        color = glassConfig.textPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Import a playlist from Spotify and make the room yours.",
                         style = GlassTypography.bodyMedium,
-                        color = GlassTextSecondary
+                        color = glassConfig.textSecondary
                     )
                 }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = 150.dp)
             ) {
                 // Section: Imported from Spotify
                 if (spotifyPlaylists.isNotEmpty()) {
                     item {
-                        SectionHeader(title = "Imported from Spotify")
+                        SectionHeader(
+                            title = "Imported from Spotify",
+                            subtitle = "Synced seamlessly from Spotify"
+                        )
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(spotifyPlaylists) { p ->
+                            items(
+                                items = spotifyPlaylists,
+                                key = { it.id }
+                            ) { p ->
                                 GlassPlaylistCard(
                                     playlist = p,
-                                    onClick = { onPlaylistClick(p) }
+                                    onClick = { onPlaylistClick(p) },
+                                    size = 140.dp
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(18.dp))
                     }
                 }
 
                 // Section: Your Playlists
                 if (localPlaylists.isNotEmpty()) {
                     item {
-                        SectionHeader(title = "Your Playlists")
+                        SectionHeader(
+                            title = "Your Playlists",
+                            subtitle = "Mixes created on Veloura"
+                        )
                     }
-                    items(localPlaylists) { p ->
-                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                    items(
+                        items = localPlaylists,
+                        key = { it.id }
+                    ) { p ->
+                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
                             GlassCard(
                                 onClick = { onPlaylistClick(p) },
                                 modifier = Modifier.fillMaxWidth()
@@ -154,20 +182,46 @@ fun PlaylistsScreen(
                                         modifier = Modifier
                                             .size(54.dp)
                                             .clip(RoundedCornerShape(14.dp))
-                                            .background(Color(0xFFE2E8F0))
-                                    )
+                                            .background(
+                                                Brush.linearGradient(
+                                                    if (glassConfig.isDark) listOf(Color(0xFF222B3D), Color(0xFF161F2E))
+                                                    else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
+                                                )
+                                            )
+                                            .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(14.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (p.artwork.isNotBlank()) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(p.artwork)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = p.name,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = glassConfig.textTertiary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = p.name,
                                             style = GlassTypography.titleMedium,
-                                            color = GlassTextPrimary
+                                            color = glassConfig.textPrimary
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "${p.trackCount} tracks",
                                             style = GlassTypography.bodyMedium,
-                                            color = GlassTextSecondary
+                                            color = glassConfig.textSecondary
                                         )
                                     }
                                 }
@@ -181,18 +235,19 @@ fun PlaylistsScreen(
 
     // Spotify Import Glass Dialog
     if (uiState.showImportDialog) {
+        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
         GlassDialog(onDismissRequest = { viewModel.closeImportDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Import Playlist",
                     style = GlassTypography.headlineMedium,
-                    color = GlassTextPrimary
+                    color = glassConfig.textPrimary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Paste a Spotify playlist URL to match and import into Glassroom.",
                     style = GlassTypography.bodyMedium,
-                    color = GlassTextSecondary
+                    color = glassConfig.textSecondary
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -201,23 +256,23 @@ fun PlaylistsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x66FFFFFF))
-                        .border(1.dp, GlassBorderWhite, RoundedCornerShape(16.dp))
+                        .background(inputBg)
+                        .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(16.dp))
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     if (uiState.importUrlInput.isEmpty()) {
                         Text(
                             text = "https://open.spotify.com/playlist/...",
                             style = GlassTypography.bodyLarge,
-                            color = GlassTextTertiary
+                            color = glassConfig.textTertiary
                         )
                     }
                     BasicTextField(
                         value = uiState.importUrlInput,
                         onValueChange = viewModel::onImportUrlChange,
                         singleLine = true,
-                        textStyle = GlassTypography.bodyLarge.copy(color = GlassTextPrimary),
-                        cursorBrush = SolidColor(GlassTextPrimary),
+                        textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                        cursorBrush = SolidColor(glassConfig.textPrimary),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -234,13 +289,13 @@ fun PlaylistsScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
-                                color = Color(0xFF2C3E50)
+                                color = GlassAccentCobalt
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = "Reading playlist...",
                                 style = GlassTypography.bodyMedium,
-                                color = GlassTextPrimary
+                                color = glassConfig.textPrimary
                             )
                         }
                     }
@@ -250,7 +305,7 @@ fun PlaylistsScreen(
                             Text(
                                 text = "Found ${uiState.importState.totalTracks} tracks",
                                 style = GlassTypography.titleMedium,
-                                color = GlassTextPrimary
+                                color = glassConfig.textPrimary
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             LinearProgressIndicator(
@@ -259,14 +314,14 @@ fun PlaylistsScreen(
                                     .fillMaxWidth()
                                     .height(6.dp)
                                     .clip(CircleShape),
-                                color = Color(0xFF2C3E50),
-                                trackColor = Color(0x330F172A)
+                                color = GlassAccentCobalt,
+                                trackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x1F0F172A)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "Matching: ${uiState.importState.currentSearchingTitle}",
                                 style = GlassTypography.labelSmall,
-                                color = GlassTextSecondary
+                                color = glassConfig.textSecondary
                             )
                             Spacer(modifier = Modifier.height(10.dp))
 
@@ -292,7 +347,7 @@ fun PlaylistsScreen(
                                         Text(
                                             text = "${item.title} - ${item.artist}",
                                             style = GlassTypography.labelSmall,
-                                            color = GlassTextPrimary,
+                                            color = glassConfig.textPrimary,
                                             maxLines = 1
                                         )
                                     }
@@ -358,12 +413,13 @@ fun PlaylistsScreen(
 
     // Create New Playlist Dialog
     if (uiState.showCreateDialog) {
+        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
         GlassDialog(onDismissRequest = { viewModel.closeCreateDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "New Playlist",
                     style = GlassTypography.headlineMedium,
-                    color = GlassTextPrimary
+                    color = glassConfig.textPrimary
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -371,23 +427,23 @@ fun PlaylistsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x66FFFFFF))
-                        .border(1.dp, GlassBorderWhite, RoundedCornerShape(16.dp))
+                        .background(inputBg)
+                        .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(16.dp))
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     if (newPlaylistName.isEmpty()) {
                         Text(
                             text = "Playlist Name",
                             style = GlassTypography.bodyLarge,
-                            color = GlassTextTertiary
+                            color = glassConfig.textTertiary
                         )
                     }
                     BasicTextField(
                         value = newPlaylistName,
                         onValueChange = { newPlaylistName = it },
                         singleLine = true,
-                        textStyle = GlassTypography.bodyLarge.copy(color = GlassTextPrimary),
-                        cursorBrush = SolidColor(GlassTextPrimary),
+                        textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                        cursorBrush = SolidColor(glassConfig.textPrimary),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -398,23 +454,23 @@ fun PlaylistsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x66FFFFFF))
-                        .border(1.dp, GlassBorderWhite, RoundedCornerShape(16.dp))
+                        .background(inputBg)
+                        .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(16.dp))
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     if (newPlaylistDesc.isEmpty()) {
                         Text(
                             text = "Description (optional)",
                             style = GlassTypography.bodyLarge,
-                            color = GlassTextTertiary
+                            color = glassConfig.textTertiary
                         )
                     }
                     BasicTextField(
                         value = newPlaylistDesc,
                         onValueChange = { newPlaylistDesc = it },
                         singleLine = true,
-                        textStyle = GlassTypography.bodyLarge.copy(color = GlassTextPrimary),
-                        cursorBrush = SolidColor(GlassTextPrimary),
+                        textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
+                        cursorBrush = SolidColor(glassConfig.textPrimary),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

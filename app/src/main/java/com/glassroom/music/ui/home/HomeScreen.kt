@@ -1,5 +1,8 @@
 package com.glassroom.music.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GraphicEq
@@ -40,15 +44,14 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val glassConfig = LocalGlassConfig.current
 
     LazyColumn(
-        modifier = modifier
-            .fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 120.dp)
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 150.dp)
     ) {
         // Veloura Branded Header with Crystal Logo Badge
         item {
-            val glassConfig = LocalGlassConfig.current
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -67,7 +70,7 @@ fun HomeScreen(
                         // Glass Encapsulated Logo Badge
                         Box(
                             modifier = Modifier
-                                .size(50.dp)
+                                .size(48.dp)
                                 .shadow(
                                     elevation = 8.dp,
                                     shape = RoundedCornerShape(18.dp),
@@ -80,7 +83,7 @@ fun HomeScreen(
                                     brush = glassConfig.borderBrush,
                                     shape = RoundedCornerShape(18.dp)
                                 )
-                                .padding(5.dp),
+                                .padding(6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
@@ -111,7 +114,7 @@ fun HomeScreen(
                     GlassIconButton(
                         icon = Icons.Outlined.GraphicEq,
                         onClick = { viewModel.loadRecommendations() },
-                        contentDescription = "Refresh"
+                        contentDescription = "Refresh Feed"
                     )
                 }
             }
@@ -130,17 +133,24 @@ fun HomeScreen(
                     onClick = onNavigateToSearch
                 )
             }
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         // Recently Played Section (if any)
         if (uiState.recentlyPlayed.isNotEmpty()) {
             item {
-                SectionHeader(title = "Recently Played")
+                SectionHeader(
+                    title = "Recently Played",
+                    subtitle = "Jump back in where you left off"
+                )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(uiState.recentlyPlayed) { track ->
+                    items(
+                        items = uiState.recentlyPlayed,
+                        key = { it.id }
+                    ) { track ->
                         GlassPlaylistCard(
                             playlist = Playlist(
                                 id = track.id,
@@ -150,22 +160,29 @@ fun HomeScreen(
                                 trackCount = 1
                             ),
                             onClick = { onTrackClick(track, uiState.recentlyPlayed) },
-                            size = 130.dp
+                            size = 140.dp
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(18.dp))
             }
         }
 
         // Made For You Section
         if (uiState.madeForYou.isNotEmpty()) {
             item {
-                SectionHeader(title = "Made For You")
+                SectionHeader(
+                    title = "Made For You",
+                    subtitle = "Curated based on your taste"
+                )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(uiState.madeForYou) { track ->
+                    items(
+                        items = uiState.madeForYou,
+                        key = { it.id }
+                    ) { track ->
                         GlassPlaylistCard(
                             playlist = Playlist(
                                 id = track.id,
@@ -175,92 +192,117 @@ fun HomeScreen(
                                 trackCount = 1
                             ),
                             onClick = { onTrackClick(track, uiState.madeForYou) },
-                            size = 145.dp
+                            size = 140.dp
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(18.dp))
             }
         }
 
         // Popular Songs Section
         item {
-            SectionHeader(title = "Popular Songs")
-            if (uiState.isLoading && uiState.popularSongs.isEmpty()) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    repeat(4) { GlassSongSkeleton() }
-                }
-            } else {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    uiState.popularSongs.forEach { track ->
-                        GlassSongCard(
-                            track = track,
-                            isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
-                            onClick = { onTrackClick(track, uiState.popularSongs) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) }
-                        )
-                    }
+            SectionHeader(
+                title = "Popular Songs",
+                subtitle = "Top played in the room"
+            )
+        }
+        if (uiState.isLoading && uiState.popularSongs.isEmpty()) {
+            items(4) {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                    GlassSongSkeleton()
                 }
             }
+        } else {
+            items(
+                items = uiState.popularSongs,
+                key = { it.id }
+            ) { track ->
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                    GlassSongCard(
+                        track = track,
+                        isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
+                        onClick = { onTrackClick(track, uiState.popularSongs) },
+                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                    )
+                }
+            }
+        }
+        item {
+            Spacer(modifier = Modifier.height(18.dp))
         }
 
         // Your Playlists Section
         if (uiState.userPlaylists.isNotEmpty()) {
             item {
-                SectionHeader(title = "Your Playlists")
+                SectionHeader(
+                    title = "Your Playlists",
+                    subtitle = "Personal playlists & mixes"
+                )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(uiState.userPlaylists) { playlist ->
+                    items(
+                        items = uiState.userPlaylists,
+                        key = { it.id }
+                    ) { playlist ->
                         GlassPlaylistCard(
                             playlist = playlist,
-                            onClick = { onPlaylistClick(playlist) }
+                            onClick = { onPlaylistClick(playlist) },
+                            size = 140.dp
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(18.dp))
             }
         }
 
         // Imported Playlists (from Spotify)
         if (uiState.importedPlaylists.isNotEmpty()) {
             item {
-                SectionHeader(title = "Imported Playlists")
+                SectionHeader(
+                    title = "Imported Playlists",
+                    subtitle = "Synced from your Spotify library"
+                )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(uiState.importedPlaylists) { playlist ->
+                    items(
+                        items = uiState.importedPlaylists,
+                        key = { it.id }
+                    ) { playlist ->
                         GlassPlaylistCard(
                             playlist = playlist,
-                            onClick = { onPlaylistClick(playlist) }
+                            onClick = { onPlaylistClick(playlist) },
+                            size = 140.dp
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(18.dp))
             }
         }
 
         // Recommended / Trending Section
         if (uiState.trending.isNotEmpty()) {
             item {
-                SectionHeader(title = "Recommended")
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    uiState.trending.forEach { track ->
-                        GlassSongCard(
-                            track = track,
-                            isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
-                            onClick = { onTrackClick(track, uiState.trending) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) }
-                        )
-                    }
+                SectionHeader(
+                    title = "Recommended For You",
+                    subtitle = "Fresh sounds picked for this session"
+                )
+            }
+            items(
+                items = uiState.trending,
+                key = { it.id }
+            ) { track ->
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                    GlassSongCard(
+                        track = track,
+                        isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
+                        onClick = { onTrackClick(track, uiState.trending) },
+                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                    )
                 }
             }
         }
@@ -268,14 +310,33 @@ fun HomeScreen(
 }
 
 @Composable
-fun SectionHeader(title: String, modifier: Modifier = Modifier) {
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
+) {
     val glassConfig = LocalGlassConfig.current
-    Text(
-        text = title,
-        style = GlassTypography.headlineMedium,
-        color = glassConfig.textPrimary,
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp)
-    )
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = title,
+            style = GlassTypography.headlineMedium.copy(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = glassConfig.textPrimary
+        )
+        if (subtitle != null) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = GlassTypography.labelSmall,
+                color = glassConfig.textTertiary,
+                fontSize = 12.sp
+            )
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package com.glassroom.music.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -16,19 +17,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.glassroom.music.domain.model.Track
+import com.glassroom.music.ui.theme.GlassAccentCobalt
 import com.glassroom.music.ui.theme.LocalGlassConfig
 
 @Composable
 fun VelouraBackdrop(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currentTrack: Track? = null,
+    isPlaying: Boolean = false
 ) {
     val glassConfig = LocalGlassConfig.current
 
     // Organic luminous breathing animations for authentic glass refraction depth
     val infiniteTransition = rememberInfiniteTransition(label = "glass_ambient")
     val pulse1 by infiniteTransition.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 1.15f,
+        initialValue = if (isPlaying) 0.85f else 0.92f,
+        targetValue = if (isPlaying) 1.20f else 1.08f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 6500, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -36,8 +41,8 @@ fun VelouraBackdrop(
         label = "ambient_pulse_1"
     )
     val pulse2 by infiniteTransition.animateFloat(
-        initialValue = 1.12f,
-        targetValue = 0.90f,
+        initialValue = if (isPlaying) 1.15f else 1.05f,
+        targetValue = if (isPlaying) 0.85f else 0.95f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 8000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -46,12 +51,33 @@ fun VelouraBackdrop(
     )
     val pulse3 by infiniteTransition.animateFloat(
         initialValue = 0.92f,
-        targetValue = 1.18f,
+        targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 7200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "ambient_pulse_3"
+    )
+
+    // Dynamic track ambient hue shift that glides softly when current track changes
+    val targetAccent = when {
+        currentTrack == null -> Color(0xFF8B5CF6)
+        else -> {
+            val hash = kotlin.math.abs((currentTrack.title + currentTrack.artist).hashCode())
+            when (hash % 5) {
+                0 -> Color(0xFF8B5CF6) // Violet Amethyst
+                1 -> Color(0xFF06B6D4) // Azure Cyan
+                2 -> Color(0xFFEC4899) // Rose Sunset
+                3 -> Color(0xFF10B981) // Emerald Mint
+                else -> Color(0xFF3B82F6) // Cobalt Blue
+            }
+        }
+    }
+
+    val animatedAccent by animateColorAsState(
+        targetValue = targetAccent,
+        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        label = "track_accent_ambient"
     )
 
     val baseBackgroundBrush = if (glassConfig.isDark) {
@@ -82,11 +108,11 @@ fun VelouraBackdrop(
             val height = size.height
 
             if (glassConfig.isDark) {
-                // Orb 1: Glowing Electric Violet / Amethyst Aura (Top-Right)
+                // Orb 1: Dynamic Track Accent Aurora (Top-Right)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x738B5CF6), // Vibrant violet glow
+                            animatedAccent.copy(alpha = 0.45f),
                             Color(0x3B6366F1), // Indigo depth
                             Color.Transparent
                         ),
@@ -99,8 +125,8 @@ fun VelouraBackdrop(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x6606B6D4), // Electric cyan
-                            Color(0x2E3B82F6), // Cobalt blur
+                            Color(0x5506B6D4), // Electric cyan
+                            Color(0x283B82F6), // Cobalt blur
                             Color.Transparent
                         ),
                         center = Offset(width * 0.10f, height * 0.52f),
@@ -112,8 +138,8 @@ fun VelouraBackdrop(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x54EC4899), // Neon rose
-                            Color(0x24F43F5E),
+                            Color(0x45EC4899), // Neon rose
+                            Color(0x1EF43F5E),
                             Color.Transparent
                         ),
                         center = Offset(width * 0.76f, height * 0.84f),
@@ -121,11 +147,11 @@ fun VelouraBackdrop(
                     )
                 )
 
-                // Orb 4: Subtle Emerald / Aquatic Specular Core (Top-Center)
+                // Orb 4: Subtle Specular Core (Top-Center)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x3810B981), // Ambient mint
+                            Color(0x2810B981), // Ambient mint
                             Color.Transparent
                         ),
                         center = Offset(width * 0.45f, height * 0.32f),
@@ -134,12 +160,12 @@ fun VelouraBackdrop(
                 )
             } else {
                 // Light Mode: Ethereal Aurora Crystal Orbs
-                // Orb 1: Luminous Sky Blue & Periwinkle (Top-Right)
+                // Orb 1: Dynamic Track Ambient Aura (Top-Right)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x5238BDF8), // Radiant sky blue
-                            Color(0x28818CF8), // Periwinkle mist
+                            animatedAccent.copy(alpha = 0.28f),
+                            Color(0x20818CF8), // Periwinkle mist
                             Color.Transparent
                         ),
                         center = Offset(width * 0.88f, height * 0.12f),
@@ -151,8 +177,8 @@ fun VelouraBackdrop(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x45F472B6), // Coral rose
-                            Color(0x1EFB7185),
+                            Color(0x35F472B6), // Coral rose
+                            Color(0x15FB7185),
                             Color.Transparent
                         ),
                         center = Offset(width * 0.08f, height * 0.48f),
@@ -164,8 +190,8 @@ fun VelouraBackdrop(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x3D34D399), // Mint glow
-                            Color(0x15059669),
+                            Color(0x2E34D399), // Mint glow
+                            Color(0x12059669),
                             Color.Transparent
                         ),
                         center = Offset(width * 0.78f, height * 0.82f),
@@ -177,7 +203,7 @@ fun VelouraBackdrop(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0x66FFFFFF),
+                            Color(0x73FFFFFF),
                             Color.Transparent
                         ),
                         center = Offset(width * 0.5f, height * 0.04f),
