@@ -1,0 +1,15 @@
+# Caddyfile for Veloura Backend Reverse Proxy with Automatic SSL (HTTPS)
+# Ganti music.yourdomain.com dengan domain atau subdomain VPS Anda.
+# Atau ganti dengan :80 jika hanya menggunakan IP tanpa domain.
+
+# music.yourdomain.com {
+#     reverse_proxy 127.0.0.1:5000 {
+#         header_up X-Real-IP {remote_host}
+#         header_up X-Forwarded-For {remote_host}
+#         header_up X-Forwarded-Proto {scheme}
+#     }
+# }
+
+:80 {
+    reverse_proxy 127.0.0.1:5000
+}

@@ -4,11 +4,15 @@ import android.content.Context
 import com.glassroom.music.data.local.GlassroomDbHelper
 import com.glassroom.music.data.local.LocalDataSource
 import com.glassroom.music.data.local.PreferencesManager
+import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.data.repository.MusicRepositoryImpl
 import com.glassroom.music.data.repository.PlaylistRepositoryImpl
 import com.glassroom.music.domain.repository.MusicRepository
 import com.glassroom.music.domain.repository.PlaylistRepository
 import com.glassroom.music.playback.PlayerManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class GlassroomContainer(context: Context) {
     val dbHelper = GlassroomDbHelper(context)
@@ -23,4 +27,13 @@ class GlassroomContainer(context: Context) {
         musicRepository = musicRepository,
         playlistRepository = playlistRepository
     )
+
+    init {
+        // Synchronize backend URL from preferences on startup
+        CoroutineScope(Dispatchers.IO).launch {
+            preferencesManager.backendUrlFlow.collect { url ->
+                NetworkClient.updateBaseUrl(url)
+            }
+        }
+    }
 }

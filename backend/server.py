@@ -293,6 +293,7 @@ def extract_stream_url(video_id):
         return STREAM_CACHE[clean_id]["url"], None
 
     last_err = ""
+    is_bot = False
     # Attempt 1: android_vr & android (best bypass for datacenter / cloud server IPs)
     try:
         ydl_opts_vr = {
@@ -309,7 +310,10 @@ def extract_stream_url(video_id):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as e:
-        last_err = f"android_vr: {e}"
+        err_str = str(e)
+        if "Sign in to confirm you" in err_str or "not a bot" in err_str:
+            is_bot = True
+        last_err = f"android_vr: {err_str}"
 
     # Attempt 2: android_creator & tv_embedded fallback
     try:
@@ -327,7 +331,15 @@ def extract_stream_url(video_id):
                 STREAM_CACHE[clean_id] = {"url": url, "time": now}
                 return url, None
     except Exception as ex:
-        last_err += f" | android_creator: {ex}"
+        err_str2 = str(ex)
+        if "Sign in to confirm you" in err_str2 or "not a bot" in err_str2:
+            is_bot = True
+        last_err += f" | android_creator: {err_str2}"
+
+    if is_bot:
+        print(f"[EXTRACTOR_WARNING] YouTube anti-bot verification encountered for track {clean_id}")
+    else:
+        print(f"[EXTRACTOR_NOTICE] Audio stream extraction unavailable for track {clean_id}: {last_err[:120]}")
 
     return None, last_err
 
@@ -354,10 +366,17 @@ def root():
 @app.route("/api/health", methods=["GET"])
 @app.route("/health", methods=["GET"])
 def health():
+    try:
+        ytdlp_ver = getattr(yt_dlp, "__version__", getattr(yt_dlp.version, "__version__", "unknown"))
+    except Exception:
+        ytdlp_ver = "unknown"
+
     return jsonify({
         "status": "online",
         "service": "Veloura Audio Backend",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "yt_dlp_version": ytdlp_ver,
+        "environment": "vercel" if os.environ.get("VERCEL") else "standalone"
     })
 
 @app.errorhandler(404)
@@ -372,6 +391,17 @@ def handle_not_found(e):
         return recommendations()
     if "search" in norm:
         return search()
+    if norm.startswith("api/stream/audio/") or norm.startswith("stream/audio/"):
+        sub_id = norm.split("audio/")[-1]
+        return proxy_audio_stream(sub_id)
+    if norm.startswith("api/stream/") or norm.startswith("stream/"):
+        sub_id = norm.split("stream/")[-1]
+        return get_stream(sub_id)
+    if norm.startswith("api/track/") or norm.startswith("track/"):
+        sub_id = norm.split("track/")[-1]
+        return get_track(sub_id)
+    if "lyrics" in norm:
+        return get_lyrics()
     return jsonify({
         "status": "error",
         "code": 404,
@@ -381,7 +411,8 @@ def handle_not_found(e):
             "/api/health",
             "/api/search?q={query}",
             "/api/recommendations",
-            "/api/stream/{track_id}"
+            "/api/stream/{track_id}",
+            "/api/stream/audio/{track_id}"
         ]
     }), 404
 
@@ -479,6 +510,7 @@ def get_stream(track_id):
         host = request.host_url.rstrip("/")
         proxy_url = f"{host}/api/stream/audio/{clean_id}"
         return jsonify({
+            "status": "success",
             "id": track_id,
             "youtubeId": clean_id,
             "streamUrl": proxy_url,
@@ -498,6 +530,7 @@ def get_stream(track_id):
                 host = request.host_url.rstrip("/")
                 proxy_url = f"{host}/api/stream/audio/{fallback_id}"
                 return jsonify({
+                    "status": "success",
                     "id": track_id,
                     "youtubeId": fallback_id,
                     "streamUrl": proxy_url,
@@ -506,10 +539,25 @@ def get_stream(track_id):
                     "source": "youtube"
                 })
         
+    # Categorize error specifically for client and diagnostics
+    is_bot_error = ("Sign in to confirm you" in (err or "") or "not a bot" in (err or ""))
+    if is_bot_error:
+        return jsonify({
+            "status": "error",
+            "code": "YOUTUBE_BOT_VERIFICATION",
+            "error": "YouTube bot verification required",
+            "message": "YouTube blocked this cloud server IP (Sign in to confirm you're not a bot). Silakan gunakan backend lokal atau hosting VPS.",
+            "id": track_id,
+            "detail": "YouTube has flagged the hosting provider datacenter IP range."
+        }), 403
+
     return jsonify({
+        "status": "error",
+        "code": "TRACK_NOT_FOUND",
         "error": "Audio stream not found",
+        "message": f"Audio stream tidak ditemukan untuk track {track_id}",
         "id": track_id,
-        "detail": err or "No error returned"
+        "detail": err or "No stream available"
     }), 404
 
 @app.route("/api/stream/audio/<path:track_id>", methods=["GET", "HEAD"])

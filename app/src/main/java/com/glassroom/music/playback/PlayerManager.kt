@@ -11,6 +11,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.glassroom.music.data.remote.NetworkClient
+import com.glassroom.music.domain.model.AudioStreamException
 import com.glassroom.music.domain.model.Lyrics
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.domain.repository.MusicRepository
@@ -227,19 +229,41 @@ class PlayerManager(
                 track.streamUrl
             } else {
                 val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
-                val direct = res.getOrNull()
-                if (!direct.isNullOrBlank() &&
-                    direct.startsWith("http") &&
-                    !direct.contains("commondatastorage.googleapis.com") &&
-                    !direct.contains("codeskulptor")
-                ) {
-                    direct
+                if (res.isSuccess) {
+                    val direct = res.getOrNull().orEmpty()
+                    if (direct.startsWith("http") &&
+                        !direct.contains("commondatastorage.googleapis.com") &&
+                        !direct.contains("codeskulptor")
+                    ) {
+                        direct
+                    } else {
+                        _isLoading.value = false
+                        _isPlaying.value = false
+                        _playbackError.value = "URL stream audio tidak valid untuk diputar."
+                        return@launch
+                    }
                 } else {
-                    ""
+                    val err = res.exceptionOrNull()
+                    val errorMessage = when (err) {
+                        is AudioStreamException.YouTubeBotBlocked ->
+                            "YouTube menolak akses dari IP server cloud (Anti-Bot: 'Sign in to confirm you\\'re not a bot'). Silakan beralih ke backend lokal di Settings atau hosting VPS."
+                        is AudioStreamException.BackendUnreachable ->
+                            err.message ?: "Tidak dapat terhubung ke server backend audio (${NetworkClient.getBaseUrl()})."
+                        is AudioStreamException.TrackNotFound ->
+                            "Audio stream tidak ditemukan untuk lagu ini (${track.title})."
+                        is AudioStreamException.ServerError ->
+                            "Server backend error (${err.httpCode}): ${err.message}"
+                        else ->
+                            err?.message ?: "Gagal memutar lagu: audio stream tidak tersedia."
+                    }
+                    _isLoading.value = false
+                    _isPlaying.value = false
+                    _playbackError.value = errorMessage
+                    return@launch
                 }
             }
 
-            // Strictly prohibit any dummy sample audio from playing
+            // Strictly prohibit dummy sample audio or empty stream
             if (resolvedUrl.isBlank() ||
                 resolvedUrl.contains("commondatastorage.googleapis.com") ||
                 resolvedUrl.contains("codeskulptor") ||
@@ -247,7 +271,7 @@ class PlayerManager(
             ) {
                 _isLoading.value = false
                 _isPlaying.value = false
-                _playbackError.value = "Koneksi ke backend audio gagal. Pastikan server backend sudah aktif (jalankan start_backend.bat) atau cek konfigurasi URL di Settings."
+                _playbackError.value = "URL stream audio tidak valid atau dilarang."
                 return@launch
             }
 

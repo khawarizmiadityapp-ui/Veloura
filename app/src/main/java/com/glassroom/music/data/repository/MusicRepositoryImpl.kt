@@ -2,9 +2,7 @@ package com.glassroom.music.data.repository
 
 import com.glassroom.music.data.local.LocalDataSource
 import com.glassroom.music.data.remote.NetworkClient
-import com.glassroom.music.data.remote.dto.LyricsDto
-import com.glassroom.music.data.remote.dto.SpotifyImportRequest
-import com.glassroom.music.data.remote.dto.TrackDto
+import com.glassroom.music.data.remote.dto.*
 import com.glassroom.music.data.util.LyricsParser
 import com.glassroom.music.domain.model.*
 import com.glassroom.music.domain.repository.MusicRepository
@@ -204,35 +202,111 @@ class MusicRepositoryImpl(
         title: String,
         artist: String
     ): Result<String> = withContext(Dispatchers.IO) {
-        val candidateHosts = (listOf(NetworkClient.getBaseUrl()) + NetworkClient.candidateUrls).distinct()
+        val activeBaseUrl = NetworkClient.getBaseUrl()
+        val api = NetworkClient.getApiService()
 
-        for (host in candidateHosts) {
-            try {
-                val api = NetworkClient.getApiService(host)
-                val response = api.getStream(
-                    trackId = trackId,
-                    title = title.ifBlank { null },
-                    artist = artist.ifBlank { null }
+        val response = try {
+            api.getStream(
+                trackId = trackId,
+                title = title.ifBlank { null },
+                artist = artist.ifBlank { null }
+            )
+        } catch (e: java.net.ConnectException) {
+            return@withContext Result.failure(
+                AudioStreamException.BackendUnreachable(
+                    "Tidak dapat terhubung ke server backend audio ($activeBaseUrl). Periksa koneksi internet atau aktifkan server di Settings.",
+                    e
                 )
-                if (response.isSuccessful && response.body()?.streamUrl != null) {
-                    var url = response.body()!!.streamUrl!!
-                    if (url.startsWith("/")) {
-                        url = "${host.trimEnd('/')}$url"
-                    }
-                    if (url.startsWith("http") &&
-                        !url.contains("commondatastorage.googleapis.com") &&
-                        !url.contains("codeskulptor") &&
-                        (!url.contains("/api/stream") || url.contains("/api/stream/audio"))
-                    ) {
-                        NetworkClient.updateBaseUrl(host)
-                        return@withContext Result.success(url)
-                    }
-                }
-            } catch (_: Exception) {
-            }
+            )
+        } catch (e: java.net.SocketTimeoutException) {
+            return@withContext Result.failure(
+                AudioStreamException.BackendUnreachable(
+                    "Koneksi ke backend audio ($activeBaseUrl) melebihi batas waktu (timeout).",
+                    e
+                )
+            )
+        } catch (e: Exception) {
+            return@withContext Result.failure(
+                AudioStreamException.BackendUnreachable(
+                    "Gagal menghubungi backend audio: ${e.localizedMessage ?: e.message}",
+                    e
+                )
+            )
         }
 
-        Result.failure(Exception("Audio stream not available for track $trackId"))
+        if (!response.isSuccessful) {
+            val errorBodyStr = response.errorBody()?.string().orEmpty()
+            val errorDto = try {
+                Gson().fromJson(errorBodyStr, BackendErrorDto::class.java)
+            } catch (_: Exception) {
+                null
+            }
+
+            val detailMsg = errorDto?.detail.orEmpty()
+            val isBotBlocked = errorDto?.code == "YOUTUBE_BOT_VERIFICATION" ||
+                    detailMsg.contains("Sign in to confirm", ignoreCase = true) ||
+                    detailMsg.contains("not a bot", ignoreCase = true) ||
+                    errorBodyStr.contains("Sign in to confirm", ignoreCase = true) ||
+                    errorBodyStr.contains("not a bot", ignoreCase = true)
+
+            if (isBotBlocked) {
+                return@withContext Result.failure(
+                    AudioStreamException.YouTubeBotBlocked(
+                        "YouTube menolak akses dari IP server cloud (${activeBaseUrl.trimEnd('/')}) dengan verifikasi: 'Sign in to confirm you\\'re not a bot'. Silakan beralih ke backend lokal atau hosting VPS."
+                    )
+                )
+            }
+
+            if (response.code() == 404) {
+                val notFoundMsg = errorDto?.message ?: errorDto?.error ?: "Audio stream tidak ditemukan untuk track $trackId"
+                return@withContext Result.failure(AudioStreamException.TrackNotFound(notFoundMsg))
+            }
+
+            return@withContext Result.failure(
+                AudioStreamException.ServerError(
+                    response.code(),
+                    "Server backend mengembalikan HTTP ${response.code()}: ${errorDto?.message ?: errorDto?.error ?: errorBodyStr.take(120)}"
+                )
+            )
+        }
+
+        val body = response.body()
+        if (body == null) {
+            return@withContext Result.failure(
+                AudioStreamException.InvalidStreamUrl("Respons backend kosong untuk track $trackId")
+            )
+        }
+
+        // Determine final playable URL: proxy audio or direct googlevideo URL
+        var finalUrl = body.streamUrl?.trim().orEmpty()
+        if (finalUrl.isBlank() && !body.directUrl.isNullOrBlank()) {
+            finalUrl = body.directUrl.trim()
+        }
+
+        if (finalUrl.isBlank()) {
+            return@withContext Result.failure(
+                AudioStreamException.InvalidStreamUrl("Backend tidak menyediakan streamUrl untuk track $trackId")
+            )
+        }
+
+        // Resolve relative URL against active base URL
+        if (finalUrl.startsWith("/")) {
+            finalUrl = "${activeBaseUrl.trimEnd('/')}$finalUrl"
+        }
+
+        if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+            return@withContext Result.failure(
+                AudioStreamException.InvalidStreamUrl("Format URL stream tidak valid: $finalUrl")
+            )
+        }
+
+        if (finalUrl.contains("commondatastorage.googleapis.com") || finalUrl.contains("codeskulptor")) {
+            return@withContext Result.failure(
+                AudioStreamException.InvalidStreamUrl("URL stream adalah sample dummy yang dilarang")
+            )
+        }
+
+        Result.success(finalUrl)
     }
 
     override suspend fun getRecommendations(): Result<Map<String, List<Track>>> = withContext(Dispatchers.IO) {
@@ -422,27 +496,25 @@ class MusicRepositoryImpl(
     override suspend fun getLyrics(title: String, artist: String): Result<Lyrics> = withContext(Dispatchers.IO) {
         if (title.isBlank()) return@withContext Result.failure(IllegalArgumentException("Title is empty"))
 
-        // 1. Try backend server if available
-        val candidateHosts = (listOf(NetworkClient.getBaseUrl()) + NetworkClient.candidateUrls).distinct()
-        for (host in candidateHosts) {
-            try {
-                val api = NetworkClient.getApiService(host)
-                val response = api.getLyrics(title = title, artist = artist)
-                if (response.isSuccessful && response.body() != null) {
-                    val body = response.body()!!
-                    val lines = LyricsParser.parse(body.syncedLyrics)
-                    return@withContext Result.success(
-                        Lyrics(
-                            trackTitle = body.trackName ?: title,
-                            artistName = body.artistName ?: artist,
-                            plainLyrics = body.plainLyrics,
-                            syncedLyrics = body.syncedLyrics,
-                            lines = lines
-                        )
+        // 1. Try active backend server first
+        try {
+            val api = NetworkClient.getApiService()
+            val response = api.getLyrics(title = title, artist = artist)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                val lines = LyricsParser.parse(body.syncedLyrics)
+                return@withContext Result.success(
+                    Lyrics(
+                        trackTitle = body.trackName ?: title,
+                        artistName = body.artistName ?: artist,
+                        plainLyrics = body.plainLyrics,
+                        syncedLyrics = body.syncedLyrics,
+                        lines = lines
                     )
-                }
-            } catch (_: Exception) {
+                )
             }
+        } catch (_: Exception) {
+            // Active backend failed or has no lyrics, fallback directly to LRCLIB
         }
 
         // 2. Direct fallback to LRCLIB (Directly works on-device even if local backend is offline)
@@ -490,6 +562,7 @@ class MusicRepositoryImpl(
                 .header("User-Agent", "Veloura/1.0 (Android Music Player)")
                 .build()
 
+                
             val searchResponse = client.newCall(searchRequest).execute()
             if (searchResponse.isSuccessful && searchResponse.body != null) {
                 val jsonStr = searchResponse.body!!.string()

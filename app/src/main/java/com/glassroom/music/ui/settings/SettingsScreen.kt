@@ -244,19 +244,88 @@ fun SettingsScreen(
                 SectionHeader(title = "Backend Service", modifier = Modifier.padding(horizontal = 0.dp))
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Audio Backend API URL",
-                            style = GlassTypography.titleMedium,
-                            color = glassConfig.textPrimary
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Audio Backend API",
+                                style = GlassTypography.titleMedium,
+                                color = glassConfig.textPrimary
+                            )
+                            val isCloud = backendUrl == NetworkClient.CLOUD_SERVER_URL
+                            val badgeText = if (isCloud) "☁️ Cloud Default" else "💻 Custom / Local"
+                            val badgeColor = if (isCloud) GlassAccentMint else GlassAccentCobalt
+                            Text(
+                                text = badgeText,
+                                style = GlassTypography.labelSmall,
+                                color = badgeColor,
+                                fontSize = 11.sp
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Runs yt-dlp on your machine/server and streams audio",
+                            text = "Server Flask + yt-dlp untuk ekstraksi dan streaming audio Veloura",
                             style = GlassTypography.labelSmall,
                             color = glassConfig.textSecondary
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        // Server Presets
+                        Text(
+                            text = "Pilih Preset Server:",
+                            style = GlassTypography.labelSmall,
+                            color = glassConfig.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GlassChip(
+                                text = "☁️ Cloud (Vercel)",
+                                isSelected = editingUrl == NetworkClient.CLOUD_SERVER_URL,
+                                onClick = {
+                                    editingUrl = NetworkClient.CLOUD_SERVER_URL
+                                    connectionStatus = null
+                                }
+                            )
+                            GlassChip(
+                                text = "💻 Laptop Wi-Fi",
+                                isSelected = editingUrl == NetworkClient.WIFI_SERVER_URL,
+                                onClick = {
+                                    editingUrl = NetworkClient.WIFI_SERVER_URL
+                                    connectionStatus = null
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GlassChip(
+                                text = "🔌 ADB (127.0.0.1)",
+                                isSelected = editingUrl == NetworkClient.ADB_REVERSE_URL,
+                                onClick = {
+                                    editingUrl = NetworkClient.ADB_REVERSE_URL
+                                    connectionStatus = null
+                                }
+                            )
+                            GlassChip(
+                                text = "📱 Emulator (10.0.2.2)",
+                                isSelected = editingUrl == NetworkClient.EMULATOR_URL,
+                                onClick = {
+                                    editingUrl = NetworkClient.EMULATOR_URL
+                                    connectionStatus = null
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Input Field
                         val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
                         Box(
                             modifier = Modifier
@@ -268,7 +337,10 @@ fun SettingsScreen(
                         ) {
                             BasicTextField(
                                 value = editingUrl,
-                                onValueChange = { editingUrl = it },
+                                onValueChange = {
+                                    editingUrl = it
+                                    connectionStatus = null
+                                },
                                 singleLine = true,
                                 textStyle = GlassTypography.bodyLarge.copy(color = glassConfig.textPrimary),
                                 cursorBrush = SolidColor(glassConfig.textPrimary),
@@ -276,43 +348,90 @@ fun SettingsScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
+                        // Action Buttons: Test Connection & Save Server
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             GlassButton(
-                                text = "Test Connection",
+                                text = if (isCheckingConnection) "Testing..." else "Test Koneksi",
                                 onClick = {
+                                    if (isCheckingConnection) return@GlassButton
                                     isCheckingConnection = true
+                                    connectionStatus = null
                                     coroutineScope.launch {
-                                        NetworkClient.updateBaseUrl(editingUrl)
-                                        preferencesManager.setBackendUrl(editingUrl)
                                         try {
-                                            val health = NetworkClient.getApiService().healthCheck()
-                                            if (health.isSuccessful) {
-                                                connectionStatus = "Connected to Veloura Backend"
+                                            val testService = NetworkClient.createServiceForUrl(editingUrl)
+                                            val healthResp = testService.healthCheck()
+                                            if (healthResp.isSuccessful && healthResp.body() != null) {
+                                                val body = healthResp.body()!!
+                                                val serviceName = body["service"] ?: "Veloura Audio Backend"
+                                                val ver = body["version"] ?: "1.0.0"
+                                                val ytdlp = body["yt_dlp_version"] ?: ""
+                                                val ytdlpInfo = if (ytdlp.isNotBlank()) " (yt-dlp $ytdlp)" else ""
+                                                connectionStatus = "✓ Online: $serviceName v$ver$ytdlpInfo"
                                             } else {
-                                                connectionStatus = "Server responded with error"
+                                                connectionStatus = "✕ Server merespons HTTP ${healthResp.code()}"
                                             }
                                         } catch (e: Exception) {
-                                            connectionStatus = "Offline (Curated Fallback Active)"
+                                            connectionStatus = "✕ Gagal terhubung: ${e.localizedMessage ?: "Timeout"}"
                                         }
                                         isCheckingConnection = false
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
                             )
 
-                            if (connectionStatus != null) {
-                                Text(
-                                    text = connectionStatus!!,
-                                    style = GlassTypography.labelSmall,
-                                    color = if (connectionStatus!!.startsWith("Connected")) GlassAccentMint else glassConfig.textSecondary,
-                                    fontSize = 11.sp
-                                )
-                            }
+                            GlassButton(
+                                text = "Terapkan",
+                                isPrimary = true,
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val normalized = NetworkClient.normalizeBaseUrl(editingUrl)
+                                        val isCustom = normalized != NetworkClient.CLOUD_SERVER_URL
+                                        preferencesManager.setBackendUrl(normalized, isCustom = isCustom)
+                                        editingUrl = normalized
+                                        connectionStatus = "✓ Server aktif diatur ke $normalized"
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Reset to Cloud Default Button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                text = "Reset ke Default Cloud (Vercel)",
+                                style = GlassTypography.labelSmall,
+                                color = GlassAccentCobalt,
+                                modifier = Modifier
+                                    .clickable {
+                                        coroutineScope.launch {
+                                            preferencesManager.resetToDefaultBackendUrl()
+                                            editingUrl = NetworkClient.CLOUD_SERVER_URL
+                                            connectionStatus = "✓ Direset ke default cloud"
+                                        }
+                                    }
+                                    .padding(vertical = 4.dp, horizontal = 6.dp)
+                            )
+                        }
+
+                        if (connectionStatus != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = connectionStatus!!,
+                                style = GlassTypography.labelSmall,
+                                color = if (connectionStatus!!.startsWith("✓")) GlassAccentMint else Color(0xFFEF4444),
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
