@@ -1,6 +1,8 @@
 package com.glassroom.music.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
@@ -223,7 +225,8 @@ fun GlassPlayerControl(
                 AnimatedContent(
                     targetState = if (isLoading) "loading" else if (isPlaying) "pause" else "play",
                     transitionSpec = {
-                        scaleIn(tween(200)) togetherWith scaleOut(tween(150))
+                        (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(160)))
+                            .togetherWith(scaleOut(spring(dampingRatio = Spring.DampingRatioNoBouncy)) + fadeOut(tween(140)))
                     },
                     label = "play_pause_switch"
                 ) { state ->

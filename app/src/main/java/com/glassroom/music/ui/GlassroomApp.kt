@@ -3,6 +3,7 @@ package com.glassroom.music.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -71,18 +72,39 @@ fun GlassroomApp(
             // Atmospheric ambient backdrop for authentic optical glass refraction
             com.glassroom.music.ui.components.VelouraBackdrop(
                 currentTrack = currentTrack,
-                isPlaying = isPlaying
+                isPlaying = isPlaying,
+                isFullPlayer = isFullPlayerExpanded
             )
 
-            // Main Navigation Content
+            // Main Navigation Content with fluid directional transitions
             NavHost(
                 navController = navController,
                 startDestination = Screen.Home.route,
                 modifier = Modifier.fillMaxSize(),
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition = { fadeOut(tween(160)) },
-                popEnterTransition = { fadeIn(tween(200)) },
-                popExitTransition = { fadeOut(tween(160)) }
+                enterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { it / 8 },
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                    ) + fadeIn(tween(200))
+                },
+                exitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { -it / 8 },
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(180))
+                },
+                popEnterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { -it / 8 },
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                    ) + fadeIn(tween(200))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { it / 8 },
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(180))
+                }
             ) {
                 composable(Screen.Home.route) {
                     val homeViewModel: HomeViewModel = viewModel {
@@ -183,16 +205,14 @@ fun GlassroomApp(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Floating MiniPlayer (Visible when track is loaded and FullPlayer is collapsed)
+                // When expanding, in-place fade-out keeps coordinates steady for Shared Element artwork travel
                 AnimatedVisibility(
                     visible = currentTrack != null && !isFullPlayerExpanded,
                     enter = slideInVertically(
                         initialOffsetY = { it },
-                        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(250)),
-                    exit = slideOutVertically(
-                        targetOffsetY = { it },
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    ) + fadeOut(tween(200))
+                        animationSpec = spring(dampingRatio = 0.86f, stiffness = 380f)
+                    ) + fadeIn(tween(220)),
+                    exit = fadeOut(tween(160))
                 ) {
                     currentTrack?.let { track ->
                         GlassMiniPlayer(
@@ -222,7 +242,7 @@ fun GlassroomApp(
                 AnimatedVisibility(
                     visible = showBottomBar && !isFullPlayerExpanded,
                     enter = fadeIn(tween(200)),
-                    exit = fadeOut(tween(180))
+                    exit = fadeOut(tween(160))
                 ) {
                     GlassBottomBar(
                         currentRoute = currentRoute,
@@ -242,12 +262,12 @@ fun GlassroomApp(
                 visible = isFullPlayerExpanded,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
-                ) + fadeIn(tween(250)),
+                    animationSpec = spring(dampingRatio = 0.86f, stiffness = 380f)
+                ) + fadeIn(tween(220)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing)
-                ) + fadeOut(tween(220))
+                    animationSpec = spring(dampingRatio = 0.90f, stiffness = 380f)
+                ) + fadeOut(tween(200))
             ) {
                 FullPlayerScreen(
                     playerManager = playerManager,

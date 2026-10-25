@@ -85,21 +85,25 @@ fun FullPlayerScreen(
 
     // Swipe down to collapse gesture
     val swipeDownState = rememberDraggableState { delta ->
-        if (delta > 16) { // User swiped down
+        if (delta > 12) { // User swiped down smoothly
             onCollapse()
         }
     }
 
     val glassConfig = LocalGlassConfig.current
+    val artworkColors = rememberAnimatedArtworkColors(track = currentTrack)
 
-    // Artwork shared element modifier
+    // Artwork shared element modifier with fluid coordinated spring
     val artworkSharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
         with(sharedTransitionScope) {
             Modifier.sharedElement(
                 state = rememberSharedContentState(key = "track_artwork"),
                 animatedVisibilityScope = animatedVisibilityScope,
                 boundsTransform = { _, _ ->
-                    tween(durationMillis = 380, easing = FastOutSlowInEasing)
+                    spring(
+                        dampingRatio = 0.86f,
+                        stiffness = 380f
+                    )
                 }
             )
         }
@@ -113,7 +117,6 @@ fun FullPlayerScreen(
                 .fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            VelouraBackdrop()
             Text(text = "No track selected", style = GlassTypography.bodyLarge, color = glassConfig.textSecondary)
         }
         return
@@ -122,25 +125,20 @@ fun FullPlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(if (glassConfig.isDark) Color(0xB3070A10) else Color(0x73FFFFFF))
     ) {
-        // Atmospheric glowing backdrop
-        VelouraBackdrop(
-            currentTrack = currentTrack,
-            isPlaying = isPlaying
-        )
-
-        // Soft ambient glow background circle behind artwork
+        // Soft ambient glow background circle behind artwork inspired by current album colors
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(340.dp)
+                .size(360.dp)
                 .scale(artworkScale)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            if (glassConfig.isDark) Color(0x4D8B5CF6) else Color(0x33A5B4FC),
-                            if (glassConfig.isDark) Color(0x2606B6D4) else Color(0x1A93C5FD),
+                            artworkColors.primary.copy(alpha = if (glassConfig.isDark) 0.50f else 0.32f),
+                            artworkColors.secondary.copy(alpha = if (glassConfig.isDark) 0.26f else 0.16f),
                             Color.Transparent
                         )
                     )
@@ -309,8 +307,8 @@ fun FullPlayerScreen(
                                 .shadow(
                                     elevation = 28.dp,
                                     shape = RoundedCornerShape(32.dp),
-                                    ambientColor = if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2A38BDF8),
-                                    spotColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x1F818CF8)
+                                    ambientColor = artworkColors.primary.copy(alpha = if (glassConfig.isDark) 0.55f else 0.25f),
+                                    spotColor = artworkColors.secondary.copy(alpha = if (glassConfig.isDark) 0.40f else 0.18f)
                                 )
                                 .clip(RoundedCornerShape(32.dp))
                                 .background(brush = glassConfig.cardBrush)
@@ -340,6 +338,7 @@ fun FullPlayerScreen(
                                             model = ImageRequest.Builder(LocalContext.current)
                                                 .data(thumb)
                                                 .crossfade(true)
+                                                .memoryCacheKey(currentTrack?.id ?: thumb)
                                                 .build(),
                                             contentDescription = currentTrack?.title,
                                             contentScale = ContentScale.Crop,

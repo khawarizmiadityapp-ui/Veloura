@@ -147,14 +147,17 @@ fun GlassMiniPlayer(
         label = "mini_next_scale"
     )
 
-    // Artwork Shared Element modifier
+    // Artwork Shared Element modifier with fluid coordinated spring
     val artworkSharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
         with(sharedTransitionScope) {
             Modifier.sharedElement(
                 state = rememberSharedContentState(key = "track_artwork"),
                 animatedVisibilityScope = animatedVisibilityScope,
                 boundsTransform = { _, _ ->
-                    tween(durationMillis = 380, easing = FastOutSlowInEasing)
+                    spring(
+                        dampingRatio = 0.86f,
+                        stiffness = 380f
+                    )
                 }
             )
         }
@@ -230,6 +233,7 @@ fun GlassMiniPlayer(
                                 model = ImageRequest.Builder(LocalContext.current)
                                     .data(thumb)
                                     .crossfade(true)
+                                    .memoryCacheKey(track.id.ifBlank { thumb })
                                     .build(),
                                 contentDescription = track.title,
                                 contentScale = ContentScale.Crop,
@@ -360,11 +364,12 @@ fun GlassMiniPlayer(
                 }
             }
 
-            // Slim luminous progress indicator on the bottom edge
+            // Slim luminous progress indicator on the bottom edge with rounded bottom corners
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
+                    .clip(RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp))
                     .background(if (glassConfig.isDark) Color(0x1AFFFFFF) else Color(0x140F172A))
             ) {
                 Box(

@@ -95,6 +95,7 @@ fun GlassPlaylistCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(playlist.artwork)
                         .crossfade(true)
+                        .memoryCacheKey(playlist.id.ifBlank { playlist.artwork })
                         .build(),
                     contentDescription = playlist.name,
                     contentScale = ContentScale.Crop,

@@ -1,12 +1,15 @@
 package com.glassroom.music.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -54,7 +56,7 @@ fun GlassBottomBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Box(
             modifier = Modifier
@@ -62,8 +64,8 @@ fun GlassBottomBar(
                 .shadow(
                     elevation = 16.dp,
                     shape = RoundedCornerShape(32.dp),
-                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A),
-                    spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x140F172A)
+                    ambientColor = if (glassConfig.isDark) Color(0x40000000) else Color(0x180F172A),
+                    spotColor = if (glassConfig.isDark) Color(0x2D000000) else Color(0x100F172A)
                 )
                 .clip(RoundedCornerShape(32.dp))
                 .background(brush = glassConfig.miniPlayerBrush)
@@ -72,7 +74,7 @@ fun GlassBottomBar(
                     brush = glassConfig.borderBrush,
                     shape = RoundedCornerShape(32.dp)
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -81,15 +83,41 @@ fun GlassBottomBar(
             ) {
                 BottomNavItems.forEach { item ->
                     val isSelected = currentRoute == item.route
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isPressed by interactionSource.collectIsPressedAsState()
+
+                    val targetColor = if (isSelected) {
+                        if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+                    } else {
+                        glassConfig.textTertiary
+                    }
+
                     val iconColor by animateColorAsState(
-                        targetValue = if (isSelected) glassConfig.textPrimary else glassConfig.textTertiary,
+                        targetValue = targetColor,
+                        animationSpec = tween(durationMillis = 200),
                         label = "icon_color"
                     )
+
                     val scale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.05f else 1f,
-                        animationSpec = spring(),
+                        targetValue = if (isPressed) 0.90f else if (isSelected) 1.05f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
                         label = "nav_scale"
                     )
+
+                    val pillBg = if (isSelected) {
+                        if (glassConfig.isDark) Color(0x2638BDF8) else Color(0x1F0284C7)
+                    } else {
+                        Color.Transparent
+                    }
+
+                    val pillBorder = if (isSelected) {
+                        if (glassConfig.isDark) Color(0x4038BDF8) else Color(0x2E0284C7)
+                    } else {
+                        Color.Transparent
+                    }
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -97,26 +125,22 @@ fun GlassBottomBar(
                             .scale(scale)
                             .clip(RoundedCornerShape(20.dp))
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
+                                interactionSource = interactionSource,
                                 indication = null
                             ) {
                                 if (!isSelected) {
                                     onNavigate(item.route)
                                 }
                             }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .size(36.dp)
-                                .then(
-                                    if (isSelected) {
-                                        Modifier
-                                            .clip(CircleShape)
-                                            .background(Color(0x1F0F172A))
-                                    } else Modifier
-                                )
+                                .clip(CircleShape)
+                                .background(pillBg)
+                                .border(0.8.dp, pillBorder, CircleShape)
                         ) {
                             Icon(
                                 imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
@@ -125,6 +149,7 @@ fun GlassBottomBar(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = item.title,
                             fontSize = 10.sp,

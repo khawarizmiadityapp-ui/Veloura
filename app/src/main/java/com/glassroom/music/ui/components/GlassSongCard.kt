@@ -145,6 +145,7 @@ fun GlassSongCard(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(track.thumbnail)
                             .crossfade(true)
+                            .memoryCacheKey(track.id.ifBlank { track.thumbnail })
                             .build(),
                         contentDescription = track.title,
                         contentScale = ContentScale.Crop,

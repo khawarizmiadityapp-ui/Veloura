@@ -1,7 +1,10 @@
 package com.glassroom.music.ui.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -14,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -53,13 +57,26 @@ fun GlassSlider(
 
     fun formatTime(sec: Int): String {
         if (sec <= 0) return "0:00"
-        val m = sec / 60
+        val h = sec / 3600
+        val m = (sec % 3600) / 60
         val s = sec % 60
-        return "%d:%02d".format(m, s)
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
     }
 
-    val activeColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF1E293B)
-    val inactiveColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x1F0F172A)
+    val activeColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+    val inactiveColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x240F172A)
+
+    val thumbScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.25f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "thumb_scale"
+    )
+
+    val trackHeight by animateDpAsState(
+        targetValue = if (isDragging) 6.dp else 4.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "track_height"
+    )
 
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
@@ -81,8 +98,14 @@ fun GlassSlider(
             thumb = {
                 Box(
                     modifier = Modifier
-                        .size(14.dp)
-                        .shadow(4.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x6638BDF8) else Color(0x33000000))
+                        .scale(thumbScale)
+                        .size(16.dp)
+                        .shadow(
+                            elevation = if (isDragging) 8.dp else 4.dp,
+                            shape = CircleShape,
+                            ambientColor = if (glassConfig.isDark) Color(0x8038BDF8) else Color(0x4D000000),
+                            spotColor = if (glassConfig.isDark) Color(0x9938BDF8) else Color(0x400284C7)
+                        )
                         .clip(CircleShape)
                         .background(activeColor)
                 )
@@ -90,7 +113,7 @@ fun GlassSlider(
             track = { sliderState ->
                 SliderDefaults.Track(
                     sliderState = sliderState,
-                    modifier = Modifier.height(4.dp),
+                    modifier = Modifier.height(trackHeight),
                     colors = SliderDefaults.colors(
                         activeTrackColor = activeColor,
                         inactiveTrackColor = inactiveColor
@@ -99,7 +122,7 @@ fun GlassSlider(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp)
+                .height(28.dp)
         )
 
         Row(
@@ -112,7 +135,7 @@ fun GlassSlider(
             Text(
                 text = formatTime(currentSeconds),
                 style = GlassTypography.labelSmall,
-                color = glassConfig.textTertiary,
+                color = if (isDragging) activeColor else glassConfig.textTertiary,
                 fontSize = 11.sp
             )
             Text(
