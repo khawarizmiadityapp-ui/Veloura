@@ -1,6 +1,6 @@
-# Glassroom — White Transparent Glassroom Music Player
+# Veloura — White Transparent Glassroom Music Player
 
-**Glassroom** adalah aplikasi Android pemutar musik modern premium yang mengusung identitas visual **“White Transparent Glassroom”**: serba putih, transparan, elegan, minimalis, soft blur, glassmorphism, animasi halus, dan memiliki kedalaman visual yang terasa seperti kaca.
+**Veloura** adalah aplikasi Android pemutar musik modern premium yang mengusung identitas visual **“White Transparent Glassroom”**: serba putih, transparan, elegan, minimalis, soft blur, glassmorphism, animasi halus, dan memiliki kedalaman visual yang terasa seperti kaca.
 
 Dibangun 100% menggunakan **Kotlin + Jetpack Compose** (tanpa XML layout), **Material 3**, **Android Media3 (ExoPlayer + MediaSession)**, serta arsitektur **Clean Architecture / MVVM**.
 
@@ -30,6 +30,46 @@ Aplikasi didesain dengan tema utama **WHITE GLASSROOM**:
 
 ---
 
+## ⚡ Arsitektur Audio & Stream Resolution (Hybrid Engine)
+
+Veloura menggunakan pendekatan **Hybrid Stream Resolution** yang andal untuk memastikan musik selalu dapat diputar tanpa hambatan:
+
+```
+[Veloura Android App]
+   ├── 1. Primary: On-Device YouTube Engine (InnerTube API - ANDROID_VR)
+   │      └── Langsung menggunakan IP HP pengguna (Bebas blokir Cloud / Anti-Bot)
+   │
+   └── 2. Fallback: Backend Service (backend/server.py / Vercel Cloud)
+          └── Fallback stream, rekomendasi lagu, dan sinkronisasi playlist
+```
+
+### 1. On-Device YouTube Stream Resolution (Bebas Blokir Cloud IP)
+- **Bypass Bot Check**: Menghindari pemblokiran IP datacenter cloud (*"Sign in to confirm you're not a bot"*) dengan menyelesaikan stream langsung dari HP pengguna.
+- **InnerTube API (`ANDROID_VR`)**: Menyamar sebagai client Android VR resmi untuk mendapatkan direct stream URL (`googlevideo.com` itag 140 / AAC 128 kbps) tanpa perlu signature deciphering.
+- **Auto-Search**: Jika track berasal dari Spotify atau track ID tidak valid/unplayable, aplikasi otomatis mencari video audio terbaik via YouTube Search API.
+- **ExoPlayer Compatibility**: Menggunakan User-Agent Oculus VR pada `DefaultHttpDataSource` agar terhindar dari error `HTTP 403 Forbidden`.
+
+### 2. On-Device Synced Lyrics (LRCLIB)
+- Mengambil lirik sinkron (*synced lyrics / LRC*) dan lirik polos (*plain lyrics*) secara otomatis langsung dari database publik **LRCLIB**.
+- 100% gratis tanpa memerlukan API key atau akun berbayar.
+
+### 3. Backend Service & Fallback Engine
+Backend Python (`backend/server.py`) tetap tersedia sebagai penyedia pencarian, metadata, dan secondary fallback:
+- `GET /api/health` ➔ Status kesehatan backend.
+- `GET /api/search?q={query}&category={songs}` ➔ Pencarian audio melalui `ytsearch15:{query}`.
+- `GET /api/track/{id}` ➔ Metadata detail track.
+- `GET /api/stream/{id}` ➔ Ekstraksi audio stream URL cadangan.
+- `GET /api/recommendations` ➔ Rekomendasi lagu populer, made for you, dan trending.
+- `POST /api/spotify/import` ➔ Menerima URL playlist Spotify dan membaca metadata track.
+
+#### Menjalankan Backend (Opsional):
+```bash
+python backend/server.py
+```
+Backend berjalan pada port `5000` (`http://localhost:5000` atau `http://10.0.2.2:5000` untuk Android Emulator). URL backend dapat dikonfigurasi langsung dari menu **Settings** di dalam aplikasi.
+
+---
+
 ## 🏛️ Arsitektur Aplikasi
 
 ```
@@ -44,7 +84,7 @@ com.glassroom.music
 │   │   ├── NetworkClient.kt          (Dynamic base URL Retrofit & OkHttp)
 │   │   └── dto/NetworkDto.kt         (DTO Models)
 │   └── repository
-│       ├── MusicRepositoryImpl.kt    (Remote search, stream resolution, Spotify import, curated fallback)
+│       ├── MusicRepositoryImpl.kt    (On-device stream resolution, remote search, Spotify import, lyrics)
 │       └── PlaylistRepositoryImpl.kt (Manajemen playlist & favorit lokal)
 │
 ├── domain
@@ -59,7 +99,7 @@ com.glassroom.music
 │
 ├── playback
 │   ├── MusicService.kt               (Android Media3 MediaSessionService + Foreground Notification)
-│   └── PlayerManager.kt              (ExoPlayer controller, queue, shuffle, repeat, state flow)
+│   └── PlayerManager.kt              (ExoPlayer controller, Oculus VR User-Agent, queue, shuffle, repeat)
 │
 ├── ui
 │   ├── components/                   (Reusable Glassroom Compose Components)
@@ -82,32 +122,6 @@ com.glassroom.music
 
 ---
 
-## 🌐 Backend Architecture (yt-dlp + Spotify Import)
-
-Sesuai ketentuan, aplikasi Android **tidak** menjalankan `yt-dlp` langsung di dalam APK Android. Seluruh proses pencarian, resolusi stream audio YouTube, dan import Spotify ditangani oleh backend service:
-
-```
-Android App  ──HTTP/JSON──>  Backend API (backend/server.py)  ──yt-dlp──>  YouTube / Web Audio
-```
-
-### Endpoint Backend:
-- `GET /api/health` ➔ Status kesehatan backend.
-- `GET /api/search?q={query}&category={songs}` ➔ Pencarian audio melalui `ytsearch15:{query}` menggunakan yt-dlp.
-- `GET /api/track/{id}` ➔ Metadata detail track.
-- `GET /api/stream/{id}` ➔ Ekstraksi direct audio stream URL (`bestaudio[ext=m4a]/bestaudio`).
-- `GET /api/recommendations` ➔ Rekomendasi lagu populer, made for you, dan trending.
-- `POST /api/spotify/import` ➔ Menerima URL playlist Spotify, membaca tracklist via public embed metadata, mencocokkan setiap lagu ke YouTube audio source, dan mengembalikan response terstruktur.
-
-### Menjalankan Backend:
-```bash
-python backend/server.py
-```
-Backend berjalan pada port `5000` (`http://localhost:5000` atau `http://10.0.2.2:5000` untuk Android Emulator). URL backend dapat dikonfigurasi langsung dari menu **Settings** di dalam aplikasi Android.
-
-*Catatan Keren: Jika backend sedang tidak dijalankan, aplikasi tetap dapat berjalan secara mulus dengan fallback curated audio streaming bawaan, sehingga portfolio dan demo tetap 100% responsif tanpa crash.*
-
----
-
 ## 🎧 Media Playback (Android Media3 / ExoPlayer)
 
 1. **Background Playback**: Dilayani oleh `MusicService` (`MediaSessionService`) yang dideklarasikan dengan `foregroundServiceType="mediaPlayback"`.
@@ -117,6 +131,7 @@ Backend berjalan pada port `5000` (`http://localhost:5000` atau `http://10.0.2.2
 
 ---
 
+
 ## 📦 Build & Instalasi
 
 Untuk mengompilasi APK debug:
@@ -125,4 +140,3 @@ Untuk mengompilasi APK debug:
 ```
 Output APK berada di:
 `app/build/outputs/apk/debug/app-debug.apk`
-"# Veloura" 
