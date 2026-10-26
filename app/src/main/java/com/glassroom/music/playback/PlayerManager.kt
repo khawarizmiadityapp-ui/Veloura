@@ -57,7 +57,7 @@ class PlayerManager(
             .build()
 
         val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+            .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
@@ -221,9 +221,9 @@ class PlayerManager(
             // Resolve direct stream URL via repository/backend
             val isDirectPlayable = track.streamUrl.isNotBlank() &&
                     track.streamUrl.startsWith("http") &&
+                    !track.streamUrl.contains("/api/stream") &&
                     !track.streamUrl.contains("commondatastorage.googleapis.com") &&
-                    !track.streamUrl.contains("codeskulptor") &&
-                    (!track.streamUrl.contains("/api/stream") || track.streamUrl.contains("/api/stream/audio"))
+                    !track.streamUrl.contains("codeskulptor")
 
             val resolvedUrl = if (isDirectPlayable) {
                 track.streamUrl
