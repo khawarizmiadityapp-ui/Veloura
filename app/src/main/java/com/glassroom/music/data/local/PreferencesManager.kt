@@ -25,6 +25,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_GLASS_INTENSITY = floatPreferencesKey("glass_intensity")
 
         private val LEGACY_DEV_HOSTS = listOf(
+            "veloura-lilac-sigma.vercel.app",
             "172.30.189.56",
             "10.10.45.8",
             "10.117.54.56",

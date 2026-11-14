@@ -10,8 +10,199 @@ import yt_dlp
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
+try:
+    import pymysql
+except ImportError:
+    pymysql = None
+
+def _load_local_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        pass
+
+_load_local_env()
+
 app = Flask(__name__)
 CORS(app)
+
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+DB_PORT = int(os.environ.get("DB_PORT", 3306))
+DB_NAME = os.environ.get("DB_NAME", "veloura_db")
+DB_USER = os.environ.get("DB_USER", "velora_usr")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "Veloura@2026")
+_DB_INITIALIZED = False
+
+_CACHE_TABLE_MAP = {
+    "search_cache": ("query_key", "results_json"),
+    "lyrics_cache": ("cache_key", "lyrics_json"),
+}
+
+def get_db_connection():
+    if pymysql is None or os.environ.get("VERCEL"):
+        return None
+    try:
+        return pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            charset="utf8mb4",
+            connect_timeout=3,
+            read_timeout=5,
+            write_timeout=5,
+            autocommit=True
+        )
+    except Exception as e:
+        print(f"[DB_NOTICE] Connection unavailable: {e}")
+        return None
+
+def init_db():
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return True
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS search_cache (
+                    query_key VARCHAR(255) PRIMARY KEY,
+                    results_json MEDIUMTEXT NOT NULL,
+                    updated_at DOUBLE NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS lyrics_cache (
+                    cache_key VARCHAR(255) PRIMARY KEY,
+                    lyrics_json MEDIUMTEXT NOT NULL,
+                    updated_at DOUBLE NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS stream_logs (
+                    track_id VARCHAR(64) PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL DEFAULT '',
+                    artist VARCHAR(255) NOT NULL DEFAULT '',
+                    play_count INT NOT NULL DEFAULT 1,
+                    last_played DOUBLE NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+        _DB_INITIALIZED = True
+        return True
+    except Exception as e:
+        print(f"[DB_NOTICE] Init failed: {e}")
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def db_get_cache(table, key, ttl_seconds):
+    if table not in _CACHE_TABLE_MAP or not init_db():
+        return None
+    key_col, val_col = _CACHE_TABLE_MAP[table]
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {val_col}, updated_at FROM {table} WHERE {key_col} = %s",
+                (key[:255],)
+            )
+            row = cur.fetchone()
+            if row and (time.time() - float(row[1]) < ttl_seconds):
+                return json.loads(row[0])
+    except Exception as e:
+        print(f"[DB_NOTICE] Cache read error ({table}): {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return None
+
+def db_set_cache(table, key, data):
+    if table not in _CACHE_TABLE_MAP or not init_db():
+        return
+    key_col, val_col = _CACHE_TABLE_MAP[table]
+    conn = get_db_connection()
+    if conn is None:
+        return
+    try:
+        payload = json.dumps(data, ensure_ascii=False)
+        now = time.time()
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {table} ({key_col}, {val_col}, updated_at) VALUES (%s, %s, %s) "
+                f"ON DUPLICATE KEY UPDATE {val_col} = VALUES({val_col}), updated_at = VALUES(updated_at)",
+                (key[:255], payload, now)
+            )
+    except Exception as e:
+        print(f"[DB_NOTICE] Cache write error ({table}): {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def db_log_stream(track_id, title="", artist=""):
+    if not track_id or not init_db():
+        return
+    conn = get_db_connection()
+    if conn is None:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO stream_logs (track_id, title, artist, play_count, last_played) "
+                "VALUES (%s, %s, %s, 1, %s) "
+                "ON DUPLICATE KEY UPDATE "
+                "title = IF(VALUES(title) <> '', VALUES(title), title), "
+                "artist = IF(VALUES(artist) <> '', VALUES(artist), artist), "
+                "play_count = play_count + 1, last_played = VALUES(last_played)",
+                (track_id[:64], (title or "")[:255], (artist or "")[:255], time.time())
+            )
+    except Exception as e:
+        print(f"[DB_NOTICE] Stream log error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def check_db_status():
+    conn = get_db_connection()
+    if conn is None:
+        return "memory_only"
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return "connected"
+    except Exception:
+        return "memory_only"
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 class VercelRouteMiddleware:
     """Restores the original requested URL path when running under Vercel serverless rewrites."""
@@ -271,10 +462,17 @@ def ytdlp_search_module(query, limit=12):
 
 def search_tracks(query, limit=12):
     """Executes high-speed search with multiple fallbacks."""
+    cache_key = f"{query.strip().lower()}::{limit}"
+    cached = db_get_cache("search_cache", cache_key, 86400)
+    if isinstance(cached, list) and cached:
+        return cached
+
     tracks = scrape_youtube_search(query, limit=limit)
     if not tracks:
         tracks = ytdlp_search_module(query, limit=limit)
-    if not tracks:
+    if tracks:
+        db_set_cache("search_cache", cache_key, tracks)
+    else:
         matched = [
             t for t in CURATED_TRACKS 
             if query.lower() in t["title"].lower() or query.lower() in t["artist"].lower()
@@ -376,6 +574,7 @@ def health():
         "service": "Veloura Audio Backend",
         "version": "1.0.0",
         "yt_dlp_version": ytdlp_ver,
+        "database": check_db_status(),
         "environment": "vercel" if os.environ.get("VERCEL") else "standalone"
     })
 
@@ -482,6 +681,14 @@ def get_track(track_id):
         "source": "youtube"
     })
 
+def _get_external_base_url():
+    host = request.host_url.rstrip("/")
+    fwd_proto = request.headers.get("X-Forwarded-Proto", "")
+    cf_visitor = request.headers.get("CF-Visitor", "")
+    if ("https" in fwd_proto.lower() or "https" in cf_visitor.lower()) and host.startswith("http://"):
+        host = "https://" + host[len("http://"):]
+    return host
+
 @app.route("/api/stream/<path:track_id>", methods=["GET"])
 @app.route("/stream/<path:track_id>", methods=["GET"])
 def get_stream(track_id):
@@ -507,7 +714,8 @@ def get_stream(track_id):
         
     stream_url, err = extract_stream_url(clean_id)
     if stream_url:
-        host = request.host_url.rstrip("/")
+        db_log_stream(clean_id, title, artist)
+        host = _get_external_base_url()
         proxy_url = f"{host}/api/stream/audio/{clean_id}"
         return jsonify({
             "status": "success",
@@ -527,7 +735,8 @@ def get_stream(track_id):
             fallback_id = found[0]["id"]
             fallback_url, _ = extract_stream_url(fallback_id)
             if fallback_url:
-                host = request.host_url.rstrip("/")
+                db_log_stream(fallback_id, title, artist)
+                host = _get_external_base_url()
                 proxy_url = f"{host}/api/stream/audio/{fallback_id}"
                 return jsonify({
                     "status": "success",
@@ -636,6 +845,11 @@ def get_lyrics():
     if cache_key in LYRICS_CACHE:
         return jsonify(LYRICS_CACHE[cache_key])
 
+    db_cached_lyrics = db_get_cache("lyrics_cache", cache_key, 30 * 86400)
+    if isinstance(db_cached_lyrics, dict):
+        LYRICS_CACHE[cache_key] = db_cached_lyrics
+        return jsonify(db_cached_lyrics)
+
     # 1. Try exact get from LRCLIB
     try:
         params = {"track_name": clean_title}
@@ -658,6 +872,7 @@ def get_lyrics():
                 "syncedLyrics": data.get("syncedLyrics")
             }
             LYRICS_CACHE[cache_key] = result
+            db_set_cache("lyrics_cache", cache_key, result)
             return jsonify(result)
     except Exception:
         pass
@@ -683,6 +898,7 @@ def get_lyrics():
                     "syncedLyrics": first.get("syncedLyrics")
                 }
                 LYRICS_CACHE[cache_key] = result
+                db_set_cache("lyrics_cache", cache_key, result)
                 return jsonify(result)
     except Exception:
         pass

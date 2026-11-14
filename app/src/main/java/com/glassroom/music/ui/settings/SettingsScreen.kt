@@ -254,9 +254,12 @@ fun SettingsScreen(
                                 style = GlassTypography.titleMedium,
                                 color = glassConfig.textPrimary
                             )
-                            val isCloud = backendUrl == NetworkClient.CLOUD_SERVER_URL
-                            val badgeText = if (isCloud) "☁️ Cloud Default" else "💻 Custom / Local"
-                            val badgeColor = if (isCloud) GlassAccentMint else GlassAccentCobalt
+                            val badgeText = when (backendUrl) {
+                                NetworkClient.SENTINEL_SERVER_URL -> "🚀 Veloura Server (Utama)"
+                                NetworkClient.VERCEL_SERVER_URL -> "☁️ Cloud (Vercel)"
+                                else -> "💻 Custom / Local"
+                            }
+                            val badgeColor = if (backendUrl == NetworkClient.SENTINEL_SERVER_URL) GlassAccentMint else GlassAccentCobalt
                             Text(
                                 text = badgeText,
                                 style = GlassTypography.labelSmall,
@@ -284,10 +287,24 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             GlassChip(
-                                text = "☁️ Cloud (Vercel)",
-                                isSelected = editingUrl == NetworkClient.CLOUD_SERVER_URL,
+                                text = "🚀 Server Utama (Sentinel)",
+                                isSelected = editingUrl == NetworkClient.SENTINEL_SERVER_URL,
                                 onClick = {
-                                    editingUrl = NetworkClient.CLOUD_SERVER_URL
+                                    editingUrl = NetworkClient.SENTINEL_SERVER_URL
+                                    connectionStatus = null
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GlassChip(
+                                text = "☁️ Cloud (Vercel)",
+                                isSelected = editingUrl == NetworkClient.VERCEL_SERVER_URL,
+                                onClick = {
+                                    editingUrl = NetworkClient.VERCEL_SERVER_URL
                                     connectionStatus = null
                                 }
                             )
@@ -409,15 +426,15 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.End
                         ) {
                             Text(
-                                text = "Reset ke Default Cloud (Vercel)",
+                                text = "Reset ke Server Utama (veloura.sentinelofc.web.id)",
                                 style = GlassTypography.labelSmall,
                                 color = GlassAccentCobalt,
                                 modifier = Modifier
                                     .clickable {
                                         coroutineScope.launch {
                                             preferencesManager.resetToDefaultBackendUrl()
-                                            editingUrl = NetworkClient.CLOUD_SERVER_URL
-                                            connectionStatus = "✓ Direset ke default cloud"
+                                            editingUrl = NetworkClient.DEFAULT_BASE_URL
+                                            connectionStatus = "✓ Direset ke server utama"
                                         }
                                     }
                                     .padding(vertical = 4.dp, horizontal = 6.dp)

@@ -39,7 +39,7 @@ Veloura menggunakan pendekatan **Hybrid Stream Resolution** yang andal untuk mem
    ├── 1. Primary: On-Device YouTube Engine (InnerTube API - ANDROID_VR)
    │      └── Langsung menggunakan IP HP pengguna (Bebas blokir Cloud / Anti-Bot)
    │
-   └── 2. Fallback: Backend Service (backend/server.py / Vercel Cloud)
+   └── 2. Fallback: Backend Service (https://veloura.sentinelofc.web.id/ / backend/server.py / Vercel Cloud)
           └── Fallback stream, rekomendasi lagu, dan sinkronisasi playlist
 ```
 
@@ -54,7 +54,7 @@ Veloura menggunakan pendekatan **Hybrid Stream Resolution** yang andal untuk mem
 - 100% gratis tanpa memerlukan API key atau akun berbayar.
 
 ### 3. Backend Service & Fallback Engine
-Backend Python (`backend/server.py`) tetap tersedia sebagai penyedia pencarian, metadata, dan secondary fallback:
+Backend Python (`backend/server.py`) berjalan sebagai server produksi utama di `https://veloura.sentinelofc.web.id/` (dan cadangan di Vercel/lokal) sebagai penyedia pencarian, metadata, lirik, dan secondary fallback:
 - `GET /api/health` ➔ Status kesehatan backend.
 - `GET /api/search?q={query}&category={songs}` ➔ Pencarian audio melalui `ytsearch15:{query}`.
 - `GET /api/track/{id}` ➔ Metadata detail track.

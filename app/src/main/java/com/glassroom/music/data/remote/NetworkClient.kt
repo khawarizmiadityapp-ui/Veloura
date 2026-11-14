@@ -7,16 +7,22 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
-    // Production Cloud Server on Vercel
-    const val CLOUD_SERVER_URL = "https://veloura-lilac-sigma.vercel.app/"
+    // Primary Production Backend Server
+    const val SENTINEL_SERVER_URL = "https://veloura.sentinelofc.web.id/"
+
+    // Secondary Cloud Server on Vercel
+    const val VERCEL_SERVER_URL = "https://veloura-lilac-sigma.vercel.app/"
+
+    // Default Cloud Server alias
+    const val CLOUD_SERVER_URL = SENTINEL_SERVER_URL
 
     // Development Presets for explicit user selection
     const val WIFI_SERVER_URL = "http://172.30.189.56:5000/"
     const val ADB_REVERSE_URL = "http://127.0.0.1:5000/"
     const val EMULATOR_URL = "http://10.0.2.2:5000/"
 
-    // Default base URL strictly points to cloud production
-    const val DEFAULT_BASE_URL = CLOUD_SERVER_URL
+    // Default base URL strictly points to primary production server
+    const val DEFAULT_BASE_URL = SENTINEL_SERVER_URL
 
     @Volatile
     private var currentBaseUrl: String = DEFAULT_BASE_URL

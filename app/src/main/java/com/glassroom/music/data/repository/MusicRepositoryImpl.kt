@@ -546,9 +546,14 @@ class MusicRepositoryImpl(
             )
         }
 
-        // Resolve relative URL against active base URL
+        // Resolve relative URL against active base URL and preserve HTTPS scheme behind reverse proxies
         if (finalUrl.startsWith("/")) {
             finalUrl = "${activeBaseUrl.trimEnd('/')}$finalUrl"
+        } else if (activeBaseUrl.startsWith("https://", ignoreCase = true) && finalUrl.startsWith("http://", ignoreCase = true)) {
+            val activeHost = activeBaseUrl.substringAfter("://").substringBefore("/")
+            if (activeHost.isNotBlank() && finalUrl.startsWith("http://$activeHost", ignoreCase = true)) {
+                finalUrl = "https://" + finalUrl.substring("http://".length)
+            }
         }
 
         if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
