@@ -967,71 +967,106 @@ def recommendations():
     })
 
 def scrape_spotify_playlist(playlist_url_or_id):
-    """Extracts playlist metadata and track list from Spotify embed."""
-    # Extract playlist ID from URL or bare ID
-    match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url_or_id)
-    playlist_id = match.group(1) if match else playlist_url_or_id.strip()
-    
-    # Spotify public embed provides tracklist metadata without requiring private user credentials
-    embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}"
-    req = urllib.request.Request(
-        embed_url,
-        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    )
-    
+    """Extracts playlist/album/track metadata and track list from Spotify embed."""
+    raw = (playlist_url_or_id or "").strip()
+    if not raw:
+        return None
+
+    # Expand short spotify.link / spotify.app.link URLs if needed
+    if "spotify.link" in raw.lower() or "spotify.app.link" in raw.lower():
+        try:
+            target = raw if raw.lower().startswith("http") else f"https://{raw}"
+            resp = requests.get(
+                target,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"},
+                allow_redirects=True,
+                timeout=10,
+            )
+            raw = resp.url or raw
+        except Exception:
+            pass
+
+    entity_type = "playlist"
+    entity_id = raw
+    m = re.search(r"spotify:(playlist|album|track):([a-zA-Z0-9]+)", raw, re.IGNORECASE)
+    if not m:
+        m = re.search(r"open\.spotify\.com/(?:intl-[a-zA-Z-]+/)?(playlist|album|track)/([a-zA-Z0-9]+)", raw, re.IGNORECASE)
+    if m:
+        entity_type = m.group(1).lower()
+        entity_id = m.group(2)
+
+    embed_url = f"https://open.spotify.com/embed/{entity_type}/{entity_id}"
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            html = resp.read().decode("utf-8")
-            
-        # Parse embedded json __NEXT_DATA__ or resource json
-        next_data_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">([^<]+)</script>', html)
-        if next_data_match:
-            data = json.loads(next_data_match.group(1))
-            entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
-            title = entity.get("name", "Imported Spotify Playlist")
-            description = entity.get("description", "Imported into Glassroom")
-            images = entity.get("images", [])
-            artwork = images[0].get("url") if images else ""
-            
-            raw_track_list = entity.get("trackList", [])
-            tracks = []
-            for item in raw_track_list:
-                t_name = item.get("title", "")
-                t_artist = item.get("subtitle", "")
-                t_duration = int(item.get("duration", 0) / 1000) if item.get("duration") else 180
-                if t_name:
-                    tracks.append({
-                        "title": t_name,
-                        "artist": t_artist,
-                        "album": title,
-                        "duration": t_duration
-                    })
-            if tracks:
-                return {
-                    "id": playlist_id,
-                    "title": title,
-                    "description": description,
-                    "artwork": artwork or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-                    "tracks": tracks
-                }
+        resp = requests.get(
+            embed_url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        html = resp.text
+
+        next_data_match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
+        if not next_data_match:
+            return None
+
+        data = json.loads(next_data_match.group(1))
+        entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
+        if not isinstance(entity, dict) or not entity:
+            return None
+
+        title = (entity.get("name") or entity.get("title") or "Imported Spotify Playlist").replace("\u00a0", " ").strip()
+        subtitle = (entity.get("subtitle") or "").replace("\u00a0", " ").strip()
+        description = (entity.get("description") or "").strip()
+        if not description:
+            description = f"By {subtitle} • Imported from Spotify" if subtitle else "Imported from Spotify"
+
+        cover_sources = (entity.get("coverArt") or {}).get("sources") or []
+        visual_images = (entity.get("visualIdentity") or {}).get("image") or []
+        legacy_images = entity.get("images") or []
+        artwork = ""
+        for candidates in (cover_sources, visual_images, legacy_images):
+            if candidates and isinstance(candidates[0], dict) and candidates[0].get("url"):
+                artwork = candidates[0]["url"]
+                break
+
+        raw_track_list = entity.get("trackList") or []
+        tracks = []
+        for item in raw_track_list:
+            if not isinstance(item, dict):
+                continue
+            t_name = (item.get("title") or "").replace("\u00a0", " ").strip()
+            t_artist = (item.get("subtitle") or "").replace("\u00a0", " ").strip()
+            t_duration = int(item.get("duration", 0) / 1000) if item.get("duration") else 180
+            if t_name:
+                tracks.append({
+                    "title": t_name,
+                    "artist": t_artist,
+                    "album": title,
+                    "duration": t_duration
+                })
+
+        if not tracks and entity_type == "track" and title:
+            t_duration = int(entity.get("duration", 0) / 1000) if entity.get("duration") else 180
+            tracks.append({
+                "title": title,
+                "artist": subtitle,
+                "album": title,
+                "duration": t_duration
+            })
+
+        if tracks:
+            return {
+                "id": entity_id,
+                "title": title,
+                "description": description,
+                "artwork": artwork or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+                "tracks": tracks
+            }
     except Exception as e:
         print(f"Spotify embed scrape notice: {e}")
 
-    # Fallback realistic playlist structure if scraping was blocked or format changed
-    return {
-        "id": playlist_id,
-        "title": "Glassroom Spotify Selections",
-        "description": "Curated imported tracks matching your taste",
-        "artwork": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80",
-        "tracks": [
-            {"title": "Blinding Lights", "artist": "The Weeknd", "album": "After Hours", "duration": 200},
-            {"title": "Starboy", "artist": "The Weeknd", "album": "Starboy", "duration": 230},
-            {"title": "As It Was", "artist": "Harry Styles", "album": "Harry's House", "duration": 167},
-            {"title": "Levitating", "artist": "Dua Lipa", "album": "Future Nostalgia", "duration": 203},
-            {"title": "Midnight City", "artist": "M83", "album": "Hurry Up", "duration": 243},
-            {"title": "Get Lucky", "artist": "Daft Punk", "album": "Random Access Memories", "duration": 248}
-        ]
-    }
+    return None
 
 @app.route("/api/spotify/import", methods=["POST"])
 @app.route("/spotify/import", methods=["POST"])
@@ -1043,6 +1078,10 @@ def spotify_import():
         return jsonify({"error": "Spotify URL is required"}), 400
 
     playlist_data = scrape_spotify_playlist(url)
+    if not playlist_data:
+        return jsonify({
+            "error": "Could not extract Spotify playlist metadata. Ensure the link is valid and public."
+        }), 422
     raw_tracks = playlist_data.get("tracks", [])
     
     def match_track(item):
@@ -1102,8 +1141,8 @@ def spotify_import():
     matched_count = 0
     unavailable_count = 0
 
-    # Match concurrently up to 6 workers for speed
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+    # Match concurrently up to 12 workers for speed
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
         results = list(executor.map(match_track, raw_tracks))
 
     for res in results:

@@ -13,19 +13,30 @@ import kotlinx.coroutines.withContext
 
 class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
 
+    private fun trackToContentValues(track: Track): ContentValues = ContentValues().apply {
+        put("id", track.id)
+        put("title", track.title)
+        put("artist", track.artist)
+        put("album", track.album)
+        put("thumbnail", track.thumbnail)
+        put("duration", track.duration)
+        put("source", track.source)
+        put("streamReference", track.streamUrl)
+    }
+
+    private fun playlistToContentValues(playlist: Playlist): ContentValues = ContentValues().apply {
+        put("id", playlist.id)
+        put("name", playlist.name)
+        put("description", playlist.description)
+        put("artwork", playlist.artwork)
+        put("source", playlist.source)
+        put("createdAt", playlist.createdAt)
+        put("isFavorite", if (playlist.isFavorite) 1 else 0)
+    }
+
     suspend fun upsertTrack(track: Track) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
-        val cv = ContentValues().apply {
-            put("id", track.id)
-            put("title", track.title)
-            put("artist", track.artist)
-            put("album", track.album)
-            put("thumbnail", track.thumbnail)
-            put("duration", track.duration)
-            put("source", track.source)
-            put("streamReference", track.streamUrl)
-        }
-        db.insertWithOnConflict(GlassroomDbHelper.TABLE_TRACKS, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        db.insertWithOnConflict(GlassroomDbHelper.TABLE_TRACKS, null, trackToContentValues(track), SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     suspend fun getTrackById(trackId: String): Track? = withContext(Dispatchers.IO) {
@@ -110,16 +121,44 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
 
     suspend fun insertPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
-        val cv = ContentValues().apply {
-            put("id", playlist.id)
-            put("name", playlist.name)
-            put("description", playlist.description)
-            put("artwork", playlist.artwork)
-            put("source", playlist.source)
-            put("createdAt", playlist.createdAt)
-            put("isFavorite", if (playlist.isFavorite) 1 else 0)
+        db.insertWithOnConflict(GlassroomDbHelper.TABLE_PLAYLISTS, null, playlistToContentValues(playlist), SQLiteDatabase.CONFLICT_REPLACE)
+        dbHelper.notifyPlaylistsChanged()
+    }
+
+    suspend fun saveImportedPlaylist(playlist: Playlist, tracks: List<Track>) = withContext(Dispatchers.IO) {
+        val db = dbHelper.writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertWithOnConflict(
+                GlassroomDbHelper.TABLE_PLAYLISTS,
+                null,
+                playlistToContentValues(playlist),
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+            db.delete(GlassroomDbHelper.TABLE_PLAYLIST_TRACKS, "playlistId = ?", arrayOf(playlist.id))
+            tracks.forEachIndexed { index, track ->
+                db.insertWithOnConflict(
+                    GlassroomDbHelper.TABLE_TRACKS,
+                    null,
+                    trackToContentValues(track),
+                    SQLiteDatabase.CONFLICT_REPLACE
+                )
+                val ptCv = ContentValues().apply {
+                    put("playlistId", playlist.id)
+                    put("trackId", track.id)
+                    put("position", index)
+                }
+                db.insertWithOnConflict(
+                    GlassroomDbHelper.TABLE_PLAYLIST_TRACKS,
+                    null,
+                    ptCv,
+                    SQLiteDatabase.CONFLICT_IGNORE
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
-        db.insertWithOnConflict(GlassroomDbHelper.TABLE_PLAYLISTS, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
         dbHelper.notifyPlaylistsChanged()
     }
 

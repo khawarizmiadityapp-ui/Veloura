@@ -7,13 +7,20 @@ import com.glassroom.music.data.util.LyricsParser
 import com.glassroom.music.domain.model.*
 import com.glassroom.music.domain.repository.MusicRepository
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -483,6 +490,16 @@ class MusicRepositoryImpl(
     }
 
     private fun extractFirstVideoIdFromSearchJson(responseText: String, excludedId: String?): String? {
+        val rendererPattern = Regex(""""videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""")
+        val rendererMatches = rendererPattern.findAll(responseText).map { it.groupValues[1] }.distinct().toList()
+        if (rendererMatches.isNotEmpty()) {
+            return if (!excludedId.isNullOrBlank()) {
+                rendererMatches.firstOrNull { it != excludedId } ?: rendererMatches.firstOrNull()
+            } else {
+                rendererMatches.firstOrNull()
+            }
+        }
+
         val pattern = Regex(""""videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""")
         val matches = pattern.findAll(responseText).map { it.groupValues[1] }.distinct().toList()
         return if (!excludedId.isNullOrBlank()) {
@@ -806,6 +823,195 @@ class MusicRepositoryImpl(
         }
     }
 
+    private data class SpotifyTrackMetadata(
+        val title: String,
+        val artist: String,
+        val durationSec: Int,
+        val spotifyTrackId: String
+    )
+
+    private data class SpotifyEmbedPayload(
+        val id: String,
+        val title: String,
+        val description: String,
+        val artwork: String,
+        val tracks: List<SpotifyTrackMetadata>
+    )
+
+    private fun getSafeLong(jsonObj: JsonObject, key: String): Long? {
+        return try {
+            if (jsonObj.has(key) && !jsonObj.get(key).isJsonNull) jsonObj.get(key).asLong else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun getSafeObj(jsonObj: JsonObject, key: String): JsonObject? {
+        return try {
+            val el = jsonObj.get(key)
+            if (el != null && el.isJsonObject) el.asJsonObject else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun getSafeArray(jsonObj: JsonObject, key: String): JsonArray? {
+        return try {
+            val el = jsonObj.get(key)
+            if (el != null && el.isJsonArray) el.asJsonArray else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseSpotifyEntityTarget(rawInput: String): Pair<String, String>? {
+        var resolved = rawInput.trim()
+        if (resolved.isBlank()) return null
+
+        // Expand short links such as spotify.link / spotify.app.link
+        if (resolved.contains("spotify.link", ignoreCase = true) ||
+            resolved.contains("spotify.app.link", ignoreCase = true)
+        ) {
+            try {
+                val targetUrl = if (resolved.startsWith("http", ignoreCase = true)) resolved else "https://$resolved"
+                val req = Request.Builder()
+                    .url(targetUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
+                    .get()
+                    .build()
+                onDeviceHttpClient.newCall(req).execute().use { resp ->
+                    resolved = resp.request.url.toString()
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        Regex("""spotify:(playlist|album|track):([a-zA-Z0-9]{10,})""", RegexOption.IGNORE_CASE)
+            .find(resolved)
+            ?.let { match ->
+                return match.groupValues[1].lowercase() to match.groupValues[2]
+            }
+
+        Regex("""open\.spotify\.com/(?:intl-[a-zA-Z-]+/)?(playlist|album|track)/([a-zA-Z0-9]{10,})""", RegexOption.IGNORE_CASE)
+            .find(resolved)
+            ?.let { match ->
+                return match.groupValues[1].lowercase() to match.groupValues[2]
+            }
+
+        if (Regex("""^[a-zA-Z0-9]{22}$""").matches(resolved)) {
+            return "playlist" to resolved
+        }
+
+        return null
+    }
+
+    private fun fetchSpotifyEmbedOnDevice(entityType: String, entityId: String): SpotifyEmbedPayload? {
+        val embedUrl = "https://open.spotify.com/embed/$entityType/$entityId"
+        val request = Request.Builder()
+            .url(embedUrl)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
+            .get()
+            .build()
+
+        val html = try {
+            onDeviceHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                response.body?.string()
+            }
+        } catch (_: Exception) {
+            return null
+        } ?: return null
+
+        val nextDataJson = Regex(
+            """<script id="__NEXT_DATA__"[^>]*>(.*?)</script>""",
+            RegexOption.DOT_MATCHES_ALL
+        ).find(html)?.groupValues?.getOrNull(1) ?: return null
+
+        val root = try {
+            Gson().fromJson(nextDataJson, JsonObject::class.java)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+
+        val entity = getSafeObj(root, "props")
+            ?.let { getSafeObj(it, "pageProps") }
+            ?.let { getSafeObj(it, "state") }
+            ?.let { getSafeObj(it, "data") }
+            ?.let { getSafeObj(it, "entity") }
+            ?: return null
+
+        val title = (getSafeString(entity, "name") ?: getSafeString(entity, "title") ?: "Imported Spotify Playlist")
+            .replace('\u00A0', ' ')
+            .trim()
+        val subtitle = getSafeString(entity, "subtitle")
+            ?.replace('\u00A0', ' ')
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val description = getSafeString(entity, "description")
+            ?.takeIf { it.isNotBlank() }
+            ?: if (subtitle != null) "By $subtitle • Imported from Spotify" else "Imported from Spotify"
+
+        val coverArtUrl = getSafeObj(entity, "coverArt")
+            ?.let { getSafeArray(it, "sources") }
+            ?.firstOrNull()
+            ?.takeIf { it.isJsonObject }
+            ?.let { getSafeString(it.asJsonObject, "url") }
+            ?: getSafeObj(entity, "visualIdentity")
+                ?.let { getSafeArray(it, "image") }
+                ?.firstOrNull()
+                ?.takeIf { it.isJsonObject }
+                ?.let { getSafeString(it.asJsonObject, "url") }
+            ?: getSafeArray(entity, "images")
+                ?.firstOrNull()
+                ?.takeIf { it.isJsonObject }
+                ?.let { getSafeString(it.asJsonObject, "url") }
+            ?: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
+
+        val parsedTracks = mutableListOf<SpotifyTrackMetadata>()
+        val trackList = getSafeArray(entity, "trackList")
+        if (trackList != null && trackList.size() > 0) {
+            for (element in trackList) {
+                if (!element.isJsonObject) continue
+                val item = element.asJsonObject
+                val tTitle = getSafeString(item, "title")?.replace('\u00A0', ' ')?.trim().orEmpty()
+                if (tTitle.isBlank()) continue
+                val tArtist = getSafeString(item, "subtitle")?.replace('\u00A0', ' ')?.trim().orEmpty()
+                val durationMs = getSafeLong(item, "duration") ?: 0L
+                val durationSec = (durationMs / 1000L).toInt().coerceAtLeast(0)
+                val uri = getSafeString(item, "uri").orEmpty()
+                val spotifyId = uri.substringAfterLast(":").trim()
+                parsedTracks.add(
+                    SpotifyTrackMetadata(
+                        title = tTitle,
+                        artist = tArtist,
+                        durationSec = durationSec,
+                        spotifyTrackId = spotifyId
+                    )
+                )
+            }
+        } else if (entityType == "track" && title.isNotBlank()) {
+            val durationMs = getSafeLong(entity, "duration") ?: 0L
+            parsedTracks.add(
+                SpotifyTrackMetadata(
+                    title = title,
+                    artist = subtitle.orEmpty(),
+                    durationSec = (durationMs / 1000L).toInt().coerceAtLeast(0),
+                    spotifyTrackId = entityId
+                )
+            )
+        }
+
+        if (parsedTracks.isEmpty()) return null
+
+        return SpotifyEmbedPayload(
+            id = entityId,
+            title = title,
+            description = description,
+            artwork = coverArtUrl,
+            tracks = parsedTracks
+        )
+    }
+
     override fun importSpotifyPlaylist(urlOrId: String): Flow<SpotifyImportState> = flow {
         emit(
             SpotifyImportState(
@@ -813,21 +1019,144 @@ class MusicRepositoryImpl(
                 progressPercent = 0.1f
             )
         )
-        delay(600)
 
+        val target = parseSpotifyEntityTarget(urlOrId)
+        if (target == null) {
+            emit(
+                SpotifyImportState(
+                    status = ImportStatus.ERROR,
+                    errorMessage = "Link Spotify tidak valid. Gunakan link playlist/album/lagu open.spotify.com."
+                )
+            )
+            return@flow
+        }
+
+        // Prioritas 1: Ekstrak metadata playlist langsung dari Spotify Embed on-device (cepat, akurat, bebas timeout)
+        val onDeviceEmbed = withContext(Dispatchers.IO) {
+            fetchSpotifyEmbedOnDevice(target.first, target.second)
+        }
+
+        if (onDeviceEmbed != null && onDeviceEmbed.tracks.isNotEmpty()) {
+            val totalCount = onDeviceEmbed.tracks.size
+            emit(
+                SpotifyImportState(
+                    status = ImportStatus.SEARCHING_MATCHES,
+                    totalTracks = totalCount,
+                    progressPercent = 0.2f
+                )
+            )
+
+            val orderedTracks = arrayOfNulls<Track>(totalCount)
+            val completedItems = mutableListOf<TrackImportItem>()
+            var matchedCount = 0
+            val semaphore = Semaphore(6)
+            val progressChannel = Channel<Triple<Int, TrackImportItem, Track>>(Channel.UNLIMITED)
+
+            coroutineScope {
+                val producerJob = launch(Dispatchers.IO) {
+                    val jobs = onDeviceEmbed.tracks.mapIndexed { idx, spTrack ->
+                        launch {
+                            semaphore.withPermit {
+                                val query = if (spTrack.artist.isNotBlank()) {
+                                    "${spTrack.artist} - ${spTrack.title}"
+                                } else {
+                                    spTrack.title
+                                }
+                                val ytId = searchYouTubeVideoIdOnDevice(query)
+                                    ?: if (spTrack.artist.isNotBlank()) searchYouTubeVideoIdOnDevice(spTrack.title) else null
+
+                                val isMatched = !ytId.isNullOrBlank()
+                                val track = Track(
+                                    id = ytId ?: "sp_${spTrack.spotifyTrackId.ifBlank { "${idx}_${spTrack.title.hashCode()}" }}",
+                                    title = spTrack.title,
+                                    artist = spTrack.artist.ifBlank { "Unknown Artist" },
+                                    album = onDeviceEmbed.title,
+                                    thumbnail = if (isMatched) {
+                                        "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+                                    } else {
+                                        onDeviceEmbed.artwork
+                                    },
+                                    duration = spTrack.durationSec,
+                                    streamUrl = if (isMatched) "/api/stream/$ytId" else "",
+                                    source = if (isMatched) "youtube" else "spotify_imported"
+                                )
+                                val importItem = TrackImportItem(
+                                    title = spTrack.title,
+                                    artist = spTrack.artist,
+                                    status = if (isMatched) ItemMatchStatus.MATCHED else ItemMatchStatus.NOT_FOUND
+                                )
+                                progressChannel.send(Triple(idx, importItem, track))
+                            }
+                        }
+                    }
+                    jobs.joinAll()
+                    progressChannel.close()
+                }
+
+                for ((idx, item, track) in progressChannel) {
+                    orderedTracks[idx] = track
+                    if (item.status == ItemMatchStatus.MATCHED) matchedCount++
+                    completedItems.add(item)
+                    val completedCount = completedItems.size
+                    val progress = 0.2f + (0.75f * (completedCount.toFloat() / totalCount.coerceAtLeast(1)))
+                    emit(
+                        SpotifyImportState(
+                            status = ImportStatus.SEARCHING_MATCHES,
+                            totalTracks = totalCount,
+                            matchedTracks = matchedCount,
+                            unavailableTracks = completedCount - matchedCount,
+                            progressPercent = progress,
+                            currentSearchingTitle = item.title,
+                            items = completedItems.toList()
+                        )
+                    )
+                }
+                producerJob.join()
+            }
+
+            val finalTracks = orderedTracks.filterNotNull()
+            val playlist = Playlist(
+                id = onDeviceEmbed.id,
+                name = onDeviceEmbed.title,
+                description = onDeviceEmbed.description,
+                artwork = onDeviceEmbed.artwork,
+                source = "spotify",
+                createdAt = System.currentTimeMillis(),
+                trackCount = finalTracks.size
+            )
+
+            localDataSource.saveImportedPlaylist(playlist, finalTracks)
+
+            emit(
+                SpotifyImportState(
+                    status = ImportStatus.SUCCESS,
+                    totalTracks = totalCount,
+                    matchedTracks = matchedCount,
+                    unavailableTracks = totalCount - matchedCount,
+                    progressPercent = 1.0f,
+                    items = completedItems.toList(),
+                    importedPlaylist = playlist
+                )
+            )
+            return@flow
+        }
+
+        // Prioritas 2: Fallback ke backend API bila Spotify Embed tidak bisa diakses langsung dari HP
         try {
             val api = NetworkClient.getApiService()
             val response = api.importSpotifyPlaylist(SpotifyImportRequest(url = urlOrId))
-            if (response.isSuccessful && response.body() != null) {
-                val data = response.body()!!
-                val rawTracks = data.tracks ?: emptyList()
-                val totalCount = data.totalCount ?: rawTracks.size
+            val body = if (response.isSuccessful) response.body() else null
+            val rawTracks = body?.tracks ?: emptyList()
+            val isLegacyFakeFallback = body?.playlist?.title == "Glassroom Spotify Selections"
+
+            if (body != null && rawTracks.isNotEmpty() && !isLegacyFakeFallback) {
+                val totalCount = body.totalCount ?: rawTracks.size
 
                 emit(
                     SpotifyImportState(
                         status = ImportStatus.SEARCHING_MATCHES,
                         totalTracks = totalCount,
-                        progressPercent = 0.35f
+                        progressPercent = 0.45f
                     )
                 )
 
@@ -835,7 +1164,6 @@ class MusicRepositoryImpl(
                 val domainTracks = mutableListOf<Track>()
 
                 rawTracks.forEachIndexed { index, tDto ->
-                    delay(120) // Smooth visual progress feedback
                     val track = mapDtoToTrack(tDto)
                     domainTracks.add(track)
                     itemsList.add(
@@ -845,22 +1173,23 @@ class MusicRepositoryImpl(
                             status = ItemMatchStatus.MATCHED
                         )
                     )
-                    val progress = 0.35f + (0.55f * ((index + 1).toFloat() / totalCount.coerceAtLeast(1)))
-                    emit(
-                        SpotifyImportState(
-                            status = ImportStatus.SEARCHING_MATCHES,
-                            totalTracks = totalCount,
-                            matchedTracks = itemsList.size,
-                            progressPercent = progress,
-                            currentSearchingTitle = track.title,
-                            items = itemsList.toList()
+                    if (index == rawTracks.lastIndex || index % 5 == 0) {
+                        val progress = 0.45f + (0.50f * ((index + 1).toFloat() / totalCount.coerceAtLeast(1)))
+                        emit(
+                            SpotifyImportState(
+                                status = ImportStatus.SEARCHING_MATCHES,
+                                totalTracks = totalCount,
+                                matchedTracks = itemsList.size,
+                                progressPercent = progress,
+                                currentSearchingTitle = track.title,
+                                items = itemsList.toList()
+                            )
                         )
-                    )
+                    }
                 }
 
-                // Save playlist into local database
-                val pDto = data.playlist
-                val playlistId = pDto?.id ?: UUID.randomUUID().toString()
+                val pDto = body.playlist
+                val playlistId = pDto?.id ?: target.second
                 val playlist = Playlist(
                     id = playlistId,
                     name = pDto?.title ?: "Imported Spotify Playlist",
@@ -871,10 +1200,7 @@ class MusicRepositoryImpl(
                     trackCount = domainTracks.size
                 )
 
-                localDataSource.insertPlaylist(playlist)
-                domainTracks.forEach { track ->
-                    localDataSource.addTrackToPlaylist(playlist.id, track)
-                }
+                localDataSource.saveImportedPlaylist(playlist, domainTracks)
 
                 emit(
                     SpotifyImportState(
@@ -886,66 +1212,18 @@ class MusicRepositoryImpl(
                         importedPlaylist = playlist
                     )
                 )
-            } else {
-                emitFallbackSpotifyImport(urlOrId)
+                return@flow
             }
-        } catch (e: Exception) {
-            emitFallbackSpotifyImport(urlOrId)
-        }
-    }.flowOn(Dispatchers.IO)
-
-    private suspend fun kotlinx.coroutines.flow.FlowCollector<SpotifyImportState>.emitFallbackSpotifyImport(url: String) {
-        val simulatedTracks = listOf(
-            defaultCuratedTracks[1], // Blinding Lights
-            defaultCuratedTracks[0], // Starboy
-            defaultCuratedTracks[3], // As It Was
-            defaultCuratedTracks[5], // Levitating
-            defaultCuratedTracks[2], // Midnight City
-            defaultCuratedTracks[4]  // Get Lucky
-        )
-        val items = mutableListOf<TrackImportItem>()
-        simulatedTracks.forEachIndexed { i, t ->
-            delay(150)
-            items.add(TrackImportItem(t.title, t.artist, ItemMatchStatus.MATCHED))
-            emit(
-                SpotifyImportState(
-                    status = ImportStatus.SEARCHING_MATCHES,
-                    totalTracks = simulatedTracks.size,
-                    matchedTracks = items.size,
-                    progressPercent = (i + 1).toFloat() / simulatedTracks.size,
-                    currentSearchingTitle = t.title,
-                    items = items.toList()
-                )
-            )
-        }
-
-        val playlistId = UUID.randomUUID().toString()
-        val playlist = Playlist(
-            id = playlistId,
-            name = "Spotify Top Favorites",
-            description = "Imported from Spotify ($url)",
-            artwork = "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80",
-            source = "spotify",
-            createdAt = System.currentTimeMillis(),
-            trackCount = simulatedTracks.size
-        )
-
-        localDataSource.insertPlaylist(playlist)
-        simulatedTracks.forEach { track ->
-            localDataSource.addTrackToPlaylist(playlist.id, track)
+        } catch (_: Exception) {
         }
 
         emit(
             SpotifyImportState(
-                status = ImportStatus.SUCCESS,
-                totalTracks = simulatedTracks.size,
-                matchedTracks = simulatedTracks.size,
-                progressPercent = 1f,
-                items = items.toList(),
-                importedPlaylist = playlist
+                status = ImportStatus.ERROR,
+                errorMessage = "Gagal membaca playlist dari Spotify. Pastikan playlist bersifat Public dan koneksi internet stabil."
             )
         )
-    }
+    }.flowOn(Dispatchers.IO)
 
     private fun getCuratedRecommendations(): Map<String, List<Track>> {
         return mapOf(

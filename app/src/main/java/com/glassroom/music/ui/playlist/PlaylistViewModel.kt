@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.glassroom.music.domain.model.*
 import com.glassroom.music.domain.repository.MusicRepository
 import com.glassroom.music.domain.repository.PlaylistRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -24,6 +25,8 @@ class PlaylistViewModel(
 
     private val _uiState = MutableStateFlow(PlaylistUiState())
     val uiState: StateFlow<PlaylistUiState> = _uiState.asStateFlow()
+
+    private var importJob: Job? = null
 
     init {
         observePlaylists()
@@ -48,6 +51,8 @@ class PlaylistViewModel(
     }
 
     fun closeImportDialog() {
+        importJob?.cancel()
+        importJob = null
         _uiState.update { it.copy(showImportDialog = false) }
     }
 
@@ -57,9 +62,9 @@ class PlaylistViewModel(
 
     fun startSpotifyImport() {
         val url = _uiState.value.importUrlInput.trim()
-        if (url.isBlank()) return
+        if (url.isBlank() || importJob?.isActive == true) return
 
-        viewModelScope.launch {
+        importJob = viewModelScope.launch {
             musicRepository.importSpotifyPlaylist(url).collect { progress ->
                 _uiState.update { it.copy(importState = progress) }
             }
