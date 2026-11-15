@@ -223,168 +223,351 @@ class MusicRepositoryImpl(
         }
     }
 
-    private fun fetchYouTubePlayerStreamUrl(videoId: String): String? {
-        try {
-            val url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
-            val userAgent = "com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-            val payload = mapOf(
-                "context" to mapOf(
-                    "client" to mapOf(
-                        "clientName" to "ANDROID_VR",
-                        "clientVersion" to "1.56.21",
-                        "androidSdkVersion" to 32,
-                        "hl" to "en",
-                        "gl" to "US"
-                    )
-                ),
-                "videoId" to videoId
+    private data class InnerTubeClientProfile(
+        val clientName: String,
+        val clientVersion: String,
+        val clientNameId: String,
+        val userAgent: String,
+        val extraClientFields: Map<String, Any> = emptyMap()
+    )
+
+    @Volatile
+    private var cachedVisitorData: String? = null
+
+    @Volatile
+    private var cachedVisitorDataExpiryMs: Long = 0L
+
+    private val visitorDataLock = Any()
+
+    private val youtubeClientProfiles = listOf(
+        InnerTubeClientProfile(
+            clientName = "VISIONOS",
+            clientVersion = "1.02",
+            clientNameId = "101",
+            userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+        ),
+        InnerTubeClientProfile(
+            clientName = "ANDROID",
+            clientVersion = "21.26.364",
+            clientNameId = "3",
+            userAgent = "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
+            extraClientFields = mapOf(
+                "androidSdkVersion" to 30,
+                "osName" to "Android",
+                "osVersion" to "11"
             )
-            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-            val body = Gson().toJson(payload).toRequestBody(jsonMediaType)
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", userAgent)
-                .header("Content-Type", "application/json")
-                .post(body)
-                .build()
+        ),
+        InnerTubeClientProfile(
+            clientName = "ANDROID_VR",
+            clientVersion = "1.65.10",
+            clientNameId = "28",
+            userAgent = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+            extraClientFields = mapOf(
+                "deviceMake" to "Oculus",
+                "deviceModel" to "Quest 3",
+                "osName" to "Android",
+                "osVersion" to "12L",
+                "androidSdkVersion" to 32
+            )
+        )
+    )
 
-            val response = onDeviceHttpClient.newCall(request).execute()
-            if (!response.isSuccessful || response.body == null) return null
+    private fun getYouTubeVisitorData(videoId: String? = null): String? {
+        val now = System.currentTimeMillis()
+        val existing = cachedVisitorData
+        if (!existing.isNullOrBlank() && now < cachedVisitorDataExpiryMs) {
+            return existing
+        }
 
-            val jsonStr = response.body!!.string()
-            val jsonObj = try {
-                Gson().fromJson(jsonStr, JsonObject::class.java)
-            } catch (_: Exception) {
-                null
-            } ?: return null
-
-            val playabilityStatus = jsonObj.getAsJsonObject("playabilityStatus")
-            val status = playabilityStatus?.let { getSafeString(it, "status") }
-            if (status != null && status != "OK") {
-                return null
+        synchronized(visitorDataLock) {
+            val freshCheck = cachedVisitorData
+            if (!freshCheck.isNullOrBlank() && System.currentTimeMillis() < cachedVisitorDataExpiryMs) {
+                return freshCheck
             }
 
-            val streamingData = jsonObj.getAsJsonObject("streamingData") ?: return null
-            val adaptiveFormats = streamingData.getAsJsonArray("adaptiveFormats")
-            val adaptiveList = adaptiveFormats?.mapNotNull { it.asJsonObject } ?: emptyList()
+            val chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+            val webClientVersion = "2.20260401.00.00"
+            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-            // Prioritas 1: itag == 140
-            val itag140 = adaptiveList.firstOrNull {
-                getSafeInt(it, "itag") == 140 && !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!itag140.isNullOrBlank()) return itag140
+            // 1. Primary: InnerTube visitor_id endpoint
+            try {
+                val payload = mapOf(
+                    "context" to mapOf(
+                        "client" to mapOf(
+                            "clientName" to "WEB",
+                            "clientVersion" to webClientVersion,
+                            "hl" to "en",
+                            "gl" to "US"
+                        )
+                    )
+                )
+                val body = Gson().toJson(payload).toRequestBody(jsonMediaType)
+                val request = Request.Builder()
+                    .url("https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false")
+                    .header("User-Agent", chromeUa)
+                    .header("Content-Type", "application/json")
+                    .header("Origin", "https://www.youtube.com")
+                    .header("X-YouTube-Client-Name", "1")
+                    .header("X-YouTube-Client-Version", webClientVersion)
+                    .post(body)
+                    .build()
 
-            // Prioritas 2: mimeType yang mengandung audio/mp4
-            val audioMp4 = adaptiveList.firstOrNull {
-                getSafeString(it, "mimeType")?.contains("audio/mp4", ignoreCase = true) == true &&
-                        !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!audioMp4.isNullOrBlank()) return audioMp4
+                onDeviceHttpClient.newCall(request).execute().use { response ->
+                    val jsonStr = response.body?.string()
+                    if (response.isSuccessful && !jsonStr.isNullOrBlank()) {
+                        val jsonObj = try {
+                            Gson().fromJson(jsonStr, JsonObject::class.java)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val vd = jsonObj?.getAsJsonObject("responseContext")?.let {
+                            getSafeString(it, "visitorData")
+                        }
+                        if (!vd.isNullOrBlank()) {
+                            cachedVisitorData = vd
+                            cachedVisitorDataExpiryMs = System.currentTimeMillis() + 30L * 60L * 1000L
+                            return vd
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
 
-            // Prioritas 3: mimeType yang mengandung audio/webm
-            val audioWebm = adaptiveList.firstOrNull {
-                getSafeString(it, "mimeType")?.contains("audio/webm", ignoreCase = true) == true &&
-                        !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!audioWebm.isNullOrBlank()) return audioWebm
+            // 2. Fallback: scrape visitorData from embed HTML
+            if (!videoId.isNullOrBlank()) {
+                try {
+                    val embedRequest = Request.Builder()
+                        .url("https://www.youtube.com/embed/$videoId")
+                        .header("User-Agent", chromeUa)
+                        .get()
+                        .build()
 
-            // Prioritas 4: fallback format audio adaptive lainnya
-            val anyAudio = adaptiveList.firstOrNull {
-                getSafeString(it, "mimeType")?.startsWith("audio/", ignoreCase = true) == true &&
-                        !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!anyAudio.isNullOrBlank()) return anyAudio
+                    onDeviceHttpClient.newCall(embedRequest).execute().use { response ->
+                        val html = response.body?.string()
+                        if (response.isSuccessful && !html.isNullOrBlank()) {
+                            val vd = Regex(""""visitorData"\s*:\s*"([^"]+)"""")
+                                .find(html)
+                                ?.groupValues
+                                ?.getOrNull(1)
+                            if (!vd.isNullOrBlank()) {
+                                cachedVisitorData = vd
+                                cachedVisitorDataExpiryMs = System.currentTimeMillis() + 30L * 60L * 1000L
+                                return vd
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
 
-            // Fallback: streamingData.formats (itag == 18)
-            val formats = streamingData.getAsJsonArray("formats")?.mapNotNull { it.asJsonObject } ?: emptyList()
-            val itag18 = formats.firstOrNull {
-                getSafeInt(it, "itag") == 18 && !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!itag18.isNullOrBlank()) return itag18
+            return cachedVisitorData
+        }
+    }
 
-            // Fallback terakhir: formats pertama dengan URL valid
-            val anyFormat = formats.firstOrNull {
-                !getSafeString(it, "url").isNullOrBlank()
-            }?.let { getSafeString(it, "url") }
-            if (!anyFormat.isNullOrBlank()) return anyFormat
-
+    private fun selectBestYouTubeStreamUrl(jsonObj: JsonObject): String? {
+        val playabilityStatus = jsonObj.getAsJsonObject("playabilityStatus")
+        val status = playabilityStatus?.let { getSafeString(it, "status") }
+        if (status != "OK") {
             return null
-        } catch (_: Exception) {
-            return null
+        }
+
+        val streamingData = jsonObj.getAsJsonObject("streamingData") ?: return null
+        val adaptiveList = streamingData.getAsJsonArray("adaptiveFormats")
+            ?.mapNotNull { it.asJsonObject } ?: emptyList()
+
+        // Prioritas 1: itag == 140 (AAC M4A)
+        adaptiveList.firstOrNull {
+            getSafeInt(it, "itag") == 140 && !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        // Prioritas 2: mimeType mengandung audio/mp4
+        adaptiveList.firstOrNull {
+            getSafeString(it, "mimeType")?.contains("audio/mp4", ignoreCase = true) == true &&
+                    !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        // Prioritas 3: mimeType mengandung audio/webm
+        adaptiveList.firstOrNull {
+            getSafeString(it, "mimeType")?.contains("audio/webm", ignoreCase = true) == true &&
+                    !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        // Prioritas 4: format audio adaptive lainnya
+        adaptiveList.firstOrNull {
+            getSafeString(it, "mimeType")?.startsWith("audio/", ignoreCase = true) == true &&
+                    !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        // Fallback: streamingData.formats (itag == 18 / format progressive)
+        val formats = streamingData.getAsJsonArray("formats")
+            ?.mapNotNull { it.asJsonObject } ?: emptyList()
+
+        formats.firstOrNull {
+            getSafeInt(it, "itag") == 18 && !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        formats.firstOrNull {
+            !getSafeString(it, "url").isNullOrBlank()
+        }?.let { return getSafeString(it, "url") }
+
+        return null
+    }
+
+    private fun fetchYouTubePlayerStreamUrl(videoId: String): String? {
+        val playerUrl = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+        val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+        val visitorData = getYouTubeVisitorData(videoId)
+
+        for (profile in youtubeClientProfiles) {
+            try {
+                val clientMap = mutableMapOf<String, Any>(
+                    "clientName" to profile.clientName,
+                    "clientVersion" to profile.clientVersion,
+                    "hl" to "en",
+                    "gl" to "US"
+                )
+                clientMap.putAll(profile.extraClientFields)
+                if (!visitorData.isNullOrBlank()) {
+                    clientMap["visitorData"] = visitorData
+                }
+
+                val payload = mapOf(
+                    "context" to mapOf("client" to clientMap),
+                    "videoId" to videoId,
+                    "contentCheckOk" to true,
+                    "racyCheckOk" to true,
+                    "playbackContext" to mapOf(
+                        "contentPlaybackContext" to mapOf(
+                            "html5Preference" to "HTML5_PREF_WANTS"
+                        )
+                    )
+                )
+
+                val body = Gson().toJson(payload).toRequestBody(jsonMediaType)
+                val requestBuilder = Request.Builder()
+                    .url(playerUrl)
+                    .header("User-Agent", profile.userAgent)
+                    .header("Content-Type", "application/json")
+                    .header("Origin", "https://www.youtube.com")
+                    .header("X-YouTube-Client-Name", profile.clientNameId)
+                    .header("X-YouTube-Client-Version", profile.clientVersion)
+                    .post(body)
+
+                if (!visitorData.isNullOrBlank()) {
+                    requestBuilder.header("X-Goog-Visitor-Id", visitorData)
+                }
+
+                val selectedUrl = onDeviceHttpClient.newCall(requestBuilder.build()).execute().use { response ->
+                    val jsonStr = response.body?.string()
+                    if (!response.isSuccessful || jsonStr.isNullOrBlank()) {
+                        null
+                    } else {
+                        val jsonObj = try {
+                            Gson().fromJson(jsonStr, JsonObject::class.java)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        jsonObj?.let { selectBestYouTubeStreamUrl(it) }
+                    }
+                }
+
+                if (!selectedUrl.isNullOrBlank()) {
+                    NetworkClient.registerStreamUserAgent(selectedUrl, profile.userAgent)
+                    return selectedUrl
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        return null
+    }
+
+    private fun extractFirstVideoIdFromSearchJson(responseText: String, excludedId: String?): String? {
+        val pattern = Regex(""""videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""")
+        val matches = pattern.findAll(responseText).map { it.groupValues[1] }.distinct().toList()
+        return if (!excludedId.isNullOrBlank()) {
+            matches.firstOrNull { it != excludedId } ?: matches.firstOrNull()
+        } else {
+            matches.firstOrNull()
         }
     }
 
     private fun searchYouTubeVideoIdOnDevice(query: String, excludedId: String? = null): String? {
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
         val searchUrl = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false"
+        val visitorData = getYouTubeVisitorData()
 
-        // 1. Coba pencarian dengan context client WEB
+        // 1. Pencarian dengan context client WEB
         try {
+            val webClient = mutableMapOf<String, Any>(
+                "clientName" to "WEB",
+                "clientVersion" to "2.20260401.00.00",
+                "hl" to "en",
+                "gl" to "US"
+            )
+            if (!visitorData.isNullOrBlank()) {
+                webClient["visitorData"] = visitorData
+            }
             val webPayload = mapOf(
-                "context" to mapOf(
-                    "client" to mapOf(
-                        "clientName" to "WEB",
-                        "clientVersion" to "2.20240101.00.00",
-                        "hl" to "en",
-                        "gl" to "US"
-                    )
-                ),
+                "context" to mapOf("client" to webClient),
                 "query" to query
             )
             val webBody = Gson().toJson(webPayload).toRequestBody(jsonMediaType)
-            val webRequest = Request.Builder()
+            val webRequestBuilder = Request.Builder()
                 .url(searchUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
                 .header("Content-Type", "application/json")
+                .header("Origin", "https://www.youtube.com")
+                .header("X-YouTube-Client-Name", "1")
+                .header("X-YouTube-Client-Version", "2.20260401.00.00")
                 .post(webBody)
-                .build()
+            if (!visitorData.isNullOrBlank()) {
+                webRequestBuilder.header("X-Goog-Visitor-Id", visitorData)
+            }
 
-            val webResponse = onDeviceHttpClient.newCall(webRequest).execute()
-            if (webResponse.isSuccessful && webResponse.body != null) {
-                val responseText = webResponse.body!!.string()
-                val pattern = Regex(""""videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""")
-                val matches = pattern.findAll(responseText).map { it.groupValues[1] }.distinct().toList()
-                val candidate = if (!excludedId.isNullOrBlank()) {
-                    matches.firstOrNull { it != excludedId } ?: matches.firstOrNull()
-                } else {
-                    matches.firstOrNull()
+            onDeviceHttpClient.newCall(webRequestBuilder.build()).execute().use { webResponse ->
+                val responseText = webResponse.body?.string()
+                if (webResponse.isSuccessful && !responseText.isNullOrBlank()) {
+                    val candidate = extractFirstVideoIdFromSearchJson(responseText, excludedId)
+                    if (!candidate.isNullOrBlank()) return candidate
                 }
-                if (!candidate.isNullOrBlank()) return candidate
             }
         } catch (_: Exception) {
         }
 
         // 2. Fallback pencarian dengan context client ANDROID_VR
         try {
+            val vrClient = mutableMapOf<String, Any>(
+                "clientName" to "ANDROID_VR",
+                "clientVersion" to "1.65.10",
+                "androidSdkVersion" to 32,
+                "hl" to "en",
+                "gl" to "US"
+            )
+            if (!visitorData.isNullOrBlank()) {
+                vrClient["visitorData"] = visitorData
+            }
             val vrPayload = mapOf(
-                "context" to mapOf(
-                    "client" to mapOf(
-                        "clientName" to "ANDROID_VR",
-                        "clientVersion" to "1.56.21",
-                        "androidSdkVersion" to 32,
-                        "hl" to "en",
-                        "gl" to "US"
-                    )
-                ),
+                "context" to mapOf("client" to vrClient),
                 "query" to query
             )
             val vrBody = Gson().toJson(vrPayload).toRequestBody(jsonMediaType)
-            val vrRequest = Request.Builder()
+            val vrRequestBuilder = Request.Builder()
                 .url(searchUrl)
-                .header("User-Agent", "com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip")
+                .header("User-Agent", "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip")
                 .header("Content-Type", "application/json")
+                .header("Origin", "https://www.youtube.com")
+                .header("X-YouTube-Client-Name", "28")
+                .header("X-YouTube-Client-Version", "1.65.10")
                 .post(vrBody)
-                .build()
+            if (!visitorData.isNullOrBlank()) {
+                vrRequestBuilder.header("X-Goog-Visitor-Id", visitorData)
+            }
 
-            val vrResponse = onDeviceHttpClient.newCall(vrRequest).execute()
-            if (vrResponse.isSuccessful && vrResponse.body != null) {
-                val responseText = vrResponse.body!!.string()
-                val pattern = Regex(""""videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""")
-                val matches = pattern.findAll(responseText).map { it.groupValues[1] }.distinct().toList()
-                return if (!excludedId.isNullOrBlank()) {
-                    matches.firstOrNull { it != excludedId } ?: matches.firstOrNull()
-                } else {
-                    matches.firstOrNull()
+            onDeviceHttpClient.newCall(vrRequestBuilder.build()).execute().use { vrResponse ->
+                val responseText = vrResponse.body?.string()
+                if (vrResponse.isSuccessful && !responseText.isNullOrBlank()) {
+                    return extractFirstVideoIdFromSearchJson(responseText, excludedId)
                 }
             }
         } catch (_: Exception) {
@@ -396,20 +579,20 @@ class MusicRepositoryImpl(
     private fun resolveYouTubeStreamOnDevice(
         trackId: String,
         title: String,
-        artist: String
+        artist: String,
+        forceSearchAlternative: Boolean = false
     ): String? {
         val isYouTubeId = trackId.length == 11 && trackId.matches(Regex("^[a-zA-Z0-9_-]{11}$"))
 
-        // a) Jika trackId adalah ID YouTube yang valid 11 karakter, coba putar langsung dari endpoint player
-        if (isYouTubeId) {
+        // a) Jika bukan mode retry alternatif dan trackId adalah ID YouTube valid, ambil langsung
+        if (!forceSearchAlternative && isYouTubeId) {
             val directUrl = fetchYouTubePlayerStreamUrl(trackId)
             if (!directUrl.isNullOrBlank()) {
                 return directUrl
             }
         }
 
-        // b) Jika trackId bukan YouTube ID 11 karakter atau player mengembalikan UNPLAYABLE/gagal,
-        // cari videoId terlebih dahulu lewat search YouTube dengan query "$title $artist audio"
+        // b) Cari videoId lewat search YouTube dengan query "$title $artist audio"
         val searchQuery = buildString {
             if (title.isNotBlank()) append(title.trim())
             if (artist.isNotBlank()) {
@@ -426,11 +609,19 @@ class MusicRepositoryImpl(
             excludedId = if (isYouTubeId) trackId else null
         )
 
-        // c) Jika videoId ditemukan dari hasil pencarian, ambil stream URL-nya via player
+        // c) Ambil stream URL dari hasil pencarian
         if (!foundVideoId.isNullOrBlank()) {
             val streamUrl = fetchYouTubePlayerStreamUrl(foundVideoId)
             if (!streamUrl.isNullOrBlank()) {
                 return streamUrl
+            }
+        }
+
+        // d) Jika mode retry alternatif belum menemukan ID lain, coba refresh trackId awal
+        if (forceSearchAlternative && isYouTubeId) {
+            val refreshedUrl = fetchYouTubePlayerStreamUrl(trackId)
+            if (!refreshedUrl.isNullOrBlank()) {
+                return refreshedUrl
             }
         }
 
@@ -441,11 +632,34 @@ class MusicRepositoryImpl(
         trackId: String,
         title: String,
         artist: String
+    ): Result<String> = resolveStreamInternal(
+        trackId = trackId,
+        title = title,
+        artist = artist,
+        forceSearchAlternative = false
+    )
+
+    override suspend fun resolveAlternativeStreamUrl(
+        trackId: String,
+        title: String,
+        artist: String
+    ): Result<String> = resolveStreamInternal(
+        trackId = trackId,
+        title = title,
+        artist = artist,
+        forceSearchAlternative = true
+    )
+
+    private suspend fun resolveStreamInternal(
+        trackId: String,
+        title: String,
+        artist: String,
+        forceSearchAlternative: Boolean
     ): Result<String> = withContext(Dispatchers.IO) {
         // Prioritas Pertama: Ekstraksi stream YouTube langsung on-device menggunakan IP HP pengguna
         // agar bebas dari blokir IP server cloud ("Sign in to confirm you're not a bot").
         val onDeviceUrl = try {
-            resolveYouTubeStreamOnDevice(trackId, title, artist)
+            resolveYouTubeStreamOnDevice(trackId, title, artist, forceSearchAlternative)
         } catch (_: Exception) {
             null
         }

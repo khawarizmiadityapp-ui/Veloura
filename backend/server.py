@@ -2,6 +2,7 @@ import concurrent.futures
 import json
 import os
 import re
+import requests
 import subprocess
 import time
 import urllib.parse
@@ -480,53 +481,65 @@ def search_tracks(query, limit=12):
         tracks = matched if matched else CURATED_TRACKS
     return tracks
 
-def extract_stream_url(video_id):
+def extract_stream_url(video_id, force_refresh=False):
     """Extracts direct audio stream URL using yt_dlp Python library with multiple player clients."""
     clean_id = re.sub(r'_sp_\d+', '', video_id)
     clean_id = LEGACY_ID_MAP.get(clean_id, clean_id)
     now = time.time()
     
     # Check cache
-    if clean_id in STREAM_CACHE and (now - STREAM_CACHE[clean_id]["time"] < 7200):
+    if not force_refresh and clean_id in STREAM_CACHE and (now - STREAM_CACHE[clean_id]["time"] < 7200):
         return STREAM_CACHE[clean_id]["url"], None
 
     last_err = ""
     is_bot = False
-    # Attempt 1: android_vr & android (best bypass for datacenter / cloud server IPs)
+    # Attempt 1: clients returning directly playable URLs without forced Range PO-Token errors
     try:
-        ydl_opts_vr = {
+        ydl_opts_primary = {
             "quiet": True,
-            "format": "ba/b",
+            "format": "ba[protocol^=http]/b[protocol^=http]/ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android_vr", "android", "android_music"]}}
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "tv_embedded", "visionos", "android_music", "android_vr"]
+                }
+            }
         }
-        with yt_dlp.YoutubeDL(ydl_opts_vr) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_primary) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
-                STREAM_CACHE[clean_id] = {"url": url, "time": now}
+                STREAM_CACHE[clean_id] = {
+                    "url": url,
+                    "headers": info.get("http_headers") or {},
+                    "time": now,
+                }
                 return url, None
     except Exception as e:
         err_str = str(e)
         if "Sign in to confirm you" in err_str or "not a bot" in err_str:
             is_bot = True
-        last_err = f"android_vr: {err_str}"
+        last_err = f"primary_clients: {err_str}"
 
-    # Attempt 2: android_creator & tv_embedded fallback
+    # Attempt 2: android_creator fallback
     try:
         ydl_opts_creator = {
             "quiet": True,
-            "format": "ba/b",
+            "format": "ba[protocol^=http]/b[protocol^=http]/ba/b",
             "skip_download": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android_creator", "tv_embedded"]}}
+            "extractor_args": {"youtube": {"player_client": ["android_creator"]}}
         }
         with yt_dlp.YoutubeDL(ydl_opts_creator) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             url = info.get("url")
             if url and url.startswith("http"):
-                STREAM_CACHE[clean_id] = {"url": url, "time": now}
+                STREAM_CACHE[clean_id] = {
+                    "url": url,
+                    "headers": info.get("http_headers") or {},
+                    "time": now,
+                }
                 return url, None
     except Exception as ex:
         err_str2 = str(ex)
@@ -784,38 +797,70 @@ def proxy_audio_stream(track_id):
     if not stream_url:
         return jsonify({"error": "Audio stream not found", "id": track_id, "detail": err}), 404
 
-    req_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
-    }
     range_header = request.headers.get("Range")
-    if range_header:
-        req_headers["Range"] = range_header
+    default_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    )
 
     try:
-        req = urllib.request.Request(stream_url, headers=req_headers)
-        upstream_resp = urllib.request.urlopen(req, timeout=15)
-        
-        status_code = upstream_resp.status
+        upstream_resp = None
+        for attempt in range(2):
+            cached_headers = STREAM_CACHE.get(clean_id, {}).get("headers") or {}
+            req_headers = {
+                "User-Agent": cached_headers.get("User-Agent", default_ua)
+            }
+            if range_header:
+                req_headers["Range"] = range_header
+
+            upstream_resp = requests.request(
+                method=request.method,
+                url=stream_url,
+                headers=req_headers,
+                stream=True,
+                timeout=(10, 20),
+                allow_redirects=True,
+            )
+
+            if upstream_resp.status_code in (403, 410) and attempt == 0:
+                upstream_resp.close()
+                STREAM_CACHE.pop(clean_id, None)
+                stream_url, err = extract_stream_url(clean_id, force_refresh=True)
+                if not stream_url:
+                    return jsonify({"error": "Audio stream expired", "id": track_id, "detail": err}), 502
+                continue
+            break
+
+        if upstream_resp is None or upstream_resp.status_code >= 400:
+            code = upstream_resp.status_code if upstream_resp is not None else 502
+            if upstream_resp is not None:
+                upstream_resp.close()
+            return jsonify({"error": "Proxy audio stream failed", "detail": f"Upstream HTTP {code}"}), 502
+
+        status_code = upstream_resp.status_code
         content_type = upstream_resp.headers.get("Content-Type", "audio/mp4")
         content_length = upstream_resp.headers.get("Content-Length")
         content_range = upstream_resp.headers.get("Content-Range")
 
-        def generate():
-            try:
-                while True:
-                    chunk = upstream_resp.read(64 * 1024)
-                    if not chunk:
-                        break
-                    yield chunk
-            except Exception:
-                pass
-            finally:
+        if request.method == "HEAD":
+            upstream_resp.close()
+            resp = Response(b"", status=status_code, content_type=content_type)
+        else:
+            def generate():
                 try:
-                    upstream_resp.close()
+                    for chunk in upstream_resp.iter_content(chunk_size=64 * 1024):
+                        if chunk:
+                            yield chunk
                 except Exception:
                     pass
+                finally:
+                    try:
+                        upstream_resp.close()
+                    except Exception:
+                        pass
 
-        resp = Response(generate(), status=status_code, content_type=content_type)
+            resp = Response(generate(), status=status_code, content_type=content_type)
+
         resp.headers["Accept-Ranges"] = "bytes"
         if content_length:
             resp.headers["Content-Length"] = content_length

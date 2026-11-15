@@ -10,6 +10,10 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.domain.model.AudioStreamException
@@ -56,14 +60,29 @@ class PlayerManager(
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setUserAgent("com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip")
+        val defaultUserAgent =
+            "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+
+        // Leave userAgent null on DefaultHttpDataSource so per-URL User-Agent headers
+        // injected by ResolvingDataSource are not overwritten during connection setup.
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(null)
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
 
-        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+        val baseDataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val resolvingDataSourceFactory = ResolvingDataSource.Factory(baseDataSourceFactory) { dataSpec ->
+            val streamUa = NetworkClient.getStreamUserAgent(dataSpec.uri.toString(), defaultUserAgent)
+            val headers = HashMap(dataSpec.httpRequestHeaders)
+            headers["User-Agent"] = streamUa
+            dataSpec.buildUpon()
+                .setHttpRequestHeaders(headers)
+                .build()
+        }
+
+        val mediaSourceFactory =
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory(resolvingDataSourceFactory)
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -113,6 +132,8 @@ class PlayerManager(
     private var progressJob: Job? = null
     private var playJob: Job? = null
     private var lyricsJob: Job? = null
+    private var currentPlayToken: Long = 0L
+    private var retriedPlayToken: Long = -1L
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -144,14 +165,49 @@ class PlayerManager(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            val failedToken = currentPlayToken
+            val failedTrack = _currentTrack.value
+            val detailedError = formatPlaybackError(error)
+
+            if (failedTrack != null && retriedPlayToken != failedToken) {
+                retriedPlayToken = failedToken
+                _isLoading.value = true
+                _isPlaying.value = false
+                _playbackError.value = null
+
+                playJob?.cancel()
+                playJob = scope.launch {
+                    val altResult = musicRepository.resolveAlternativeStreamUrl(
+                        trackId = failedTrack.id,
+                        title = failedTrack.title,
+                        artist = failedTrack.artist
+                    )
+                    if (currentPlayToken != failedToken) return@launch
+
+                    val altUrl = altResult.getOrNull().orEmpty()
+                    if (altResult.isSuccess && isValidPlayableUrl(altUrl)) {
+                        prepareAndPlayStream(failedTrack, altUrl)
+                        return@launch
+                    }
+
+                    _isLoading.value = false
+                    _isPlaying.value = false
+                    _playbackError.value = detailedError
+                    delay(1500)
+                    if (currentPlayToken == failedToken && _queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
+                        skipNext()
+                    }
+                }
+                return
+            }
+
             _isLoading.value = false
             _isPlaying.value = false
-            _playbackError.value = "Playback error: ${error.localizedMessage ?: "Stream tidak dapat diputar"}"
-            // Fallback play next or try resolved alternative
+            _playbackError.value = detailedError
             scope.launch {
-                // If stream failed, skip to next after brief delay
+                // If stream failed, skip to next after brief delay unless user switched track
                 delay(1500)
-                if (_queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
+                if (currentPlayToken == failedToken && _queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
                     skipNext()
                 }
             }
@@ -200,12 +256,66 @@ class PlayerManager(
         playCurrentIndex()
     }
 
+    private fun isValidPlayableUrl(url: String): Boolean {
+        return url.isNotBlank() &&
+            (url.startsWith("http://") || url.startsWith("https://")) &&
+            !url.contains("commondatastorage.googleapis.com") &&
+            !url.contains("codeskulptor")
+    }
+
+    private fun formatPlaybackError(error: PlaybackException): String {
+        var cause: Throwable? = error.cause
+        while (cause != null) {
+            if (cause is HttpDataSource.InvalidResponseCodeException) {
+                return "Playback error: HTTP ${cause.responseCode} (${error.errorCodeName})"
+            }
+            if (cause is HttpDataSource.HttpDataSourceException) {
+                val rootDetail = cause.cause?.localizedMessage?.takeIf { it.isNotBlank() }
+                    ?: error.errorCodeName
+                return "Playback error: Koneksi stream gagal ($rootDetail)"
+            }
+            cause = cause.cause
+        }
+        return "Playback error: ${error.localizedMessage ?: "Stream tidak dapat diputar"}"
+    }
+
+    private suspend fun prepareAndPlayStream(track: Track, resolvedUrl: String) {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.album)
+            .setArtworkUri(if (track.thumbnail.isNotBlank()) android.net.Uri.parse(track.thumbnail) else null)
+            .build()
+
+        val mediaItem = MediaItem.Builder()
+            .setMediaId(track.id)
+            .setUri(resolvedUrl)
+            .setMediaMetadata(metadata)
+            .build()
+
+        withContext(Dispatchers.Main) {
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.play()
+            _isPlaying.value = true
+            _currentPosition.value = 0L
+            _duration.value = if (track.duration > 0) track.duration * 1000L else 0L
+
+            try {
+                val serviceIntent = Intent(context, MusicService::class.java)
+                context.startService(serviceIntent)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun playCurrentIndex() {
         val currentList = _queue.value
         val index = _currentIndex.value
         if (index !in currentList.indices) return
 
         val track = currentList[index]
+        val playToken = ++currentPlayToken
         _currentTrack.value = track
         _isLoading.value = true
         _playbackError.value = null
@@ -222,6 +332,7 @@ class PlayerManager(
             val isDirectPlayable = track.streamUrl.isNotBlank() &&
                     track.streamUrl.startsWith("http") &&
                     !track.streamUrl.contains("/api/stream") &&
+                    !track.streamUrl.contains("googlevideo.com") &&
                     !track.streamUrl.contains("commondatastorage.googleapis.com") &&
                     !track.streamUrl.contains("codeskulptor")
 
@@ -229,12 +340,10 @@ class PlayerManager(
                 track.streamUrl
             } else {
                 val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
+                if (currentPlayToken != playToken) return@launch
                 if (res.isSuccess) {
                     val direct = res.getOrNull().orEmpty()
-                    if (direct.startsWith("http") &&
-                        !direct.contains("commondatastorage.googleapis.com") &&
-                        !direct.contains("codeskulptor")
-                    ) {
+                    if (isValidPlayableUrl(direct)) {
                         direct
                     } else {
                         _isLoading.value = false
@@ -264,44 +373,15 @@ class PlayerManager(
             }
 
             // Strictly prohibit dummy sample audio or empty stream
-            if (resolvedUrl.isBlank() ||
-                resolvedUrl.contains("commondatastorage.googleapis.com") ||
-                resolvedUrl.contains("codeskulptor") ||
-                !resolvedUrl.startsWith("http")
-            ) {
+            if (!isValidPlayableUrl(resolvedUrl)) {
                 _isLoading.value = false
                 _isPlaying.value = false
                 _playbackError.value = "URL stream audio tidak valid atau dilarang."
                 return@launch
             }
 
-            val metadata = MediaMetadata.Builder()
-                .setTitle(track.title)
-                .setArtist(track.artist)
-                .setAlbumTitle(track.album)
-                .setArtworkUri(if (track.thumbnail.isNotBlank()) android.net.Uri.parse(track.thumbnail) else null)
-                .build()
-
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(track.id)
-                .setUri(resolvedUrl)
-                .setMediaMetadata(metadata)
-                .build()
-
-            withContext(Dispatchers.Main) {
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                exoPlayer.play()
-                _isPlaying.value = true
-                _currentPosition.value = 0L
-                _duration.value = if (track.duration > 0) track.duration * 1000L else 0L
-
-                try {
-                    val serviceIntent = android.content.Intent(context, MusicService::class.java)
-                    context.startService(serviceIntent)
-                } catch (_: Exception) {
-                }
-            }
+            if (currentPlayToken != playToken) return@launch
+            prepareAndPlayStream(track, resolvedUrl)
         }
     }
 

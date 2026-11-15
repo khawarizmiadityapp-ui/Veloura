@@ -4,6 +4,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
@@ -110,4 +111,18 @@ object NetworkClient {
     }
 
     fun getBaseUrl(): String = currentBaseUrl
+
+    private val streamUserAgents = ConcurrentHashMap<String, String>()
+
+    fun registerStreamUserAgent(url: String, userAgent: String) {
+        if (url.isBlank() || userAgent.isBlank()) return
+        if (streamUserAgents.size > 128) {
+            streamUserAgents.clear()
+        }
+        streamUserAgents[url] = userAgent
+    }
+
+    fun getStreamUserAgent(url: String, defaultUserAgent: String): String {
+        return streamUserAgents[url] ?: defaultUserAgent
+    }
 }

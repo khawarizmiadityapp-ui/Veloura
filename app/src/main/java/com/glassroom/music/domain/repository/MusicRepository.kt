@@ -9,6 +9,8 @@ interface MusicRepository {
     suspend fun search(query: String, category: String = "songs"): Result<List<Track>>
     suspend fun getTrack(trackId: String): Result<Track>
     suspend fun resolveStreamUrl(trackId: String, title: String = "", artist: String = ""): Result<String>
+    suspend fun resolveAlternativeStreamUrl(trackId: String, title: String = "", artist: String = ""): Result<String> =
+        resolveStreamUrl(trackId, title, artist)
     suspend fun getRecommendations(): Result<Map<String, List<Track>>>
     fun importSpotifyPlaylist(urlOrId: String): Flow<SpotifyImportState>
     suspend fun getLyrics(title: String, artist: String = ""): Result<Lyrics>

@@ -125,8 +125,19 @@ fun FullPlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (glassConfig.isDark) Color(0xB3070A10) else Color(0x73FFFFFF))
+            .background(if (glassConfig.isDark) Color(0xFF070A10) else Color(0xFFF6F7FB))
     ) {
+        VelouraBackdrop(
+            currentTrack = currentTrack,
+            isPlaying = isPlaying,
+            isFullPlayer = true,
+            artworkColors = artworkColors
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (glassConfig.isDark) Color(0x4D070A10) else Color(0x40FFFFFF))
+        )
         // Soft ambient glow background circle behind artwork inspired by current album colors
         Box(
             modifier = Modifier
