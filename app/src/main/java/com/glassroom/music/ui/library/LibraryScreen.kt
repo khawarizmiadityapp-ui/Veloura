@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -38,6 +40,13 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val glassConfig = LocalGlassConfig.current
+    var selectedArtist by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(uiState.selectedTab) {
+        if (uiState.selectedTab != "Artists") {
+            selectedArtist = null
+        }
+    }
 
     Column(
         modifier = modifier
@@ -103,22 +112,71 @@ fun LibraryScreen(
             }
 
             "Artists" -> {
-                val artists = uiState.favoriteTracks.map { it.artist }.distinct()
-                if (artists.isEmpty()) {
+                val groupedByArtist = uiState.favoriteTracks
+                    .filter { it.artist.isNotBlank() }
+                    .groupBy { it.artist }
+                    .entries
+                    .sortedByDescending { it.value.size }
+                    .toList()
+
+                val activeArtistTracks = selectedArtist?.let { artistName ->
+                    groupedByArtist.firstOrNull { it.key == artistName }?.value
+                }
+
+                if (groupedByArtist.isEmpty()) {
                     EmptyLibraryState(
                         title = "No artists yet",
                         subtitle = "Favorite songs from artists to organize them here."
                     )
+                } else if (selectedArtist != null && activeArtistTracks != null) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 6.dp)
+                        ) {
+                            GlassIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                onClick = { selectedArtist = null },
+                                size = 38.dp,
+                                iconSize = 18.dp,
+                                contentDescription = "Back to Artists"
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = selectedArtist!!,
+                                    style = GlassTypography.titleMedium,
+                                    color = glassConfig.textPrimary
+                                )
+                                Text(
+                                    text = "${activeArtistTracks.size} lagu disukai",
+                                    style = GlassTypography.labelSmall,
+                                    color = glassConfig.textSecondary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        TrackList(
+                            tracks = activeArtistTracks,
+                            currentPlayingTrack = currentPlayingTrack,
+                            isPlaying = isPlaying,
+                            onTrackClick = onTrackClick,
+                            onFavoriteClick = viewModel::toggleFavorite,
+                            onMoreClick = onTrackMoreClick
+                        )
+                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(artists) { artist ->
+                        items(groupedByArtist) { (artist, artistTracks) ->
                             GlassCard(
                                 modifier = Modifier.fillMaxWidth(),
-                                onClick = {}
+                                onClick = { selectedArtist = artist }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -140,10 +198,23 @@ fun LibraryScreen(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
-                                    Text(
-                                        text = artist,
-                                        style = GlassTypography.titleMedium,
-                                        color = glassConfig.textPrimary
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = artist,
+                                            style = GlassTypography.titleMedium,
+                                            color = glassConfig.textPrimary
+                                        )
+                                        Text(
+                                            text = "${artistTracks.size} lagu",
+                                            style = GlassTypography.labelSmall,
+                                            color = glassConfig.textSecondary
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Filled.ChevronRight,
+                                        contentDescription = null,
+                                        tint = glassConfig.textTertiary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }

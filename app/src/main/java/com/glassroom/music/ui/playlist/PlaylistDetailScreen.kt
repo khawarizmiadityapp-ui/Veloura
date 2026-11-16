@@ -50,6 +50,7 @@ fun PlaylistDetailScreen(
     val playlistWithTracks by playlistRepository.getPlaylistWithTracks(playlistId).collectAsState(initial = null)
     val coroutineScope = rememberCoroutineScope()
     val glassConfig = LocalGlassConfig.current
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     val playlist = playlistWithTracks?.playlist
     val tracks = playlistWithTracks?.tracks ?: emptyList()
@@ -75,12 +76,7 @@ fun PlaylistDetailScreen(
             if (playlist != null) {
                 GlassIconButton(
                     icon = Icons.Filled.Delete,
-                    onClick = {
-                        coroutineScope.launch {
-                            playlistRepository.deletePlaylist(playlistId)
-                            onBack()
-                        }
-                    },
+                    onClick = { showDeleteConfirmDialog = true },
                     contentDescription = "Delete Playlist",
                     tint = Color(0xFFEF4444)
                 )
@@ -244,6 +240,47 @@ fun PlaylistDetailScreen(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirmDialog && playlist != null) {
+        GlassDialog(onDismissRequest = { showDeleteConfirmDialog = false }) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Hapus Playlist?",
+                    style = GlassTypography.headlineMedium,
+                    color = glassConfig.textPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Playlist \"${playlist.name}\" dan ${tracks.size} lagu di dalamnya akan dihapus dari perpustakaanmu.",
+                    style = GlassTypography.bodyMedium,
+                    color = glassConfig.textSecondary
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    GlassButton(
+                        text = "Batal",
+                        onClick = { showDeleteConfirmDialog = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    GlassButton(
+                        text = "Hapus",
+                        isPrimary = true,
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            coroutineScope.launch {
+                                playlistRepository.deletePlaylist(playlistId)
+                                onBack()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }

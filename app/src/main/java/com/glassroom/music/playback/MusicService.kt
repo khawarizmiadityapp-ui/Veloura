@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.annotation.OptIn
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -43,7 +45,8 @@ class MusicService : MediaSessionService() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
-            mediaSession = MediaSession.Builder(this, playerManager.exoPlayer)
+            val forwardingPlayer = VelouraForwardingPlayer(playerManager)
+            mediaSession = MediaSession.Builder(this, forwardingPlayer)
                 .setSessionActivity(sessionActivityPendingIntent)
                 .build()
 
@@ -98,6 +101,60 @@ class MusicService : MediaSessionService() {
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private class VelouraForwardingPlayer(
+        private val playerManager: PlayerManager
+    ) : ForwardingPlayer(playerManager.exoPlayer) {
+
+        override fun isCommandAvailable(command: Int): Boolean {
+            if (playerManager.queue.value.isNotEmpty() && command in MEDIA_QUEUE_COMMANDS) {
+                return true
+            }
+            return super.isCommandAvailable(command)
+        }
+
+        override fun getAvailableCommands(): Player.Commands {
+            val base = super.getAvailableCommands()
+            if (playerManager.queue.value.isEmpty()) return base
+            return base.buildUpon()
+                .addAll(*MEDIA_QUEUE_COMMANDS)
+                .build()
+        }
+
+        override fun hasNextMediaItem(): Boolean = playerManager.hasNextTrack()
+
+        override fun hasPreviousMediaItem(): Boolean = playerManager.queue.value.isNotEmpty()
+
+        override fun seekToNext() {
+            playerManager.skipNext()
+        }
+
+        override fun seekToNextMediaItem() {
+            playerManager.skipNext()
+        }
+
+        override fun seekToPrevious() {
+            playerManager.skipPrevious()
+        }
+
+        override fun seekToPreviousMediaItem() {
+            playerManager.skipPrevious()
+        }
+
+        override fun play() {
+            playerManager.resumeOrPlayCurrent()
+        }
+
+        companion object {
+            private val MEDIA_QUEUE_COMMANDS = intArrayOf(
+                Player.COMMAND_PLAY_PAUSE,
+                Player.COMMAND_SEEK_TO_NEXT,
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                Player.COMMAND_SEEK_TO_PREVIOUS,
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+            )
         }
     }
 }

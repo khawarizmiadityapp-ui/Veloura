@@ -11,6 +11,7 @@ interface MusicRepository {
     suspend fun resolveStreamUrl(trackId: String, title: String = "", artist: String = ""): Result<String>
     suspend fun resolveAlternativeStreamUrl(trackId: String, title: String = "", artist: String = ""): Result<String> =
         resolveStreamUrl(trackId, title, artist)
+    suspend fun prewarmStreamUrl(track: Track) {}
     suspend fun getRecommendations(): Result<Map<String, List<Track>>>
     fun importSpotifyPlaylist(urlOrId: String): Flow<SpotifyImportState>
     suspend fun getLyrics(title: String, artist: String = ""): Result<Lyrics>

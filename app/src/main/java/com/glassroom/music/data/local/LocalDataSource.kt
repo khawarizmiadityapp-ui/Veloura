@@ -8,6 +8,7 @@ import com.glassroom.music.domain.model.PlaylistWithTracks
 import com.glassroom.music.domain.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -80,8 +81,35 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
         }
     }
 
+    private fun readFavoriteTrackIds(db: SQLiteDatabase): Set<String> {
+        val ids = mutableSetOf<String>()
+        val cursor = db.query(
+            GlassroomDbHelper.TABLE_FAVORITES,
+            arrayOf("trackId"),
+            null,
+            null,
+            null,
+            null,
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                ids.add(it.getString(0))
+            }
+        }
+        return ids
+    }
+
+    fun getFavoriteTrackIdsFlow(): Flow<Set<String>> {
+        return dbHelper.favoritesVersion.map {
+            withContext(Dispatchers.IO) {
+                readFavoriteTrackIds(dbHelper.readableDatabase)
+            }
+        }
+    }
+
     fun getPlaylistWithTracksFlow(playlistId: String): Flow<PlaylistWithTracks?> {
-        return dbHelper.playlistsVersion.map {
+        return combine(dbHelper.playlistsVersion, dbHelper.favoritesVersion) { _, _ ->
             withContext(Dispatchers.IO) {
                 val db = dbHelper.readableDatabase
                 val playlistCursor = db.query(
@@ -97,6 +125,7 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
                     if (it.moveToFirst()) mapCursorToPlaylist(it, 0) else null
                 } ?: return@withContext null
 
+                val favIds = readFavoriteTrackIds(db)
                 val tracksQuery = """
                     SELECT t.* FROM ${GlassroomDbHelper.TABLE_TRACKS} t
                     INNER JOIN ${GlassroomDbHelper.TABLE_PLAYLIST_TRACKS} pt ON t.id = pt.trackId
@@ -108,7 +137,8 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
                 val tracks = mutableListOf<Track>()
                 tracksCursor.use {
                     while (it.moveToNext()) {
-                        tracks.add(mapCursorToTrack(it))
+                        val t = mapCursorToTrack(it)
+                        tracks.add(t.copy(isFavorite = t.id in favIds))
                     }
                 }
                 PlaylistWithTracks(
@@ -332,9 +362,10 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
 
     // HISTORY
     fun getRecentlyPlayedFlow(): Flow<List<Track>> {
-        return dbHelper.historyVersion.map {
+        return combine(dbHelper.historyVersion, dbHelper.favoritesVersion) { _, _ ->
             withContext(Dispatchers.IO) {
                 val db = dbHelper.readableDatabase
+                val favIds = readFavoriteTrackIds(db)
                 val list = mutableListOf<Track>()
                 val query = """
                     SELECT t.* FROM ${GlassroomDbHelper.TABLE_TRACKS} t
@@ -345,7 +376,8 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
                 val cursor = db.rawQuery(query, null)
                 cursor.use {
                     while (it.moveToNext()) {
-                        list.add(mapCursorToTrack(it))
+                        val t = mapCursorToTrack(it)
+                        list.add(t.copy(isFavorite = t.id in favIds))
                     }
                 }
                 list

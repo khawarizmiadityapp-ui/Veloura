@@ -15,6 +15,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import com.glassroom.music.data.local.PreferencesManager
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.domain.model.AudioStreamException
 import com.glassroom.music.domain.model.Lyrics
@@ -28,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,15 +43,55 @@ enum class GlassRepeatMode {
 class PlayerManager(
     private val context: Context,
     private val musicRepository: MusicRepository,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val preferencesManager: PreferencesManager? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
+
+    @Volatile
+    private var isGaplessEnabled: Boolean = true
+
+    @Volatile
+    private var isAutoplayEnabled: Boolean = true
+
+    private var prewarmJob: Job? = null
+    private var autoplayJob: Job? = null
+    private var persistJob: Job? = null
 
     init {
         try {
             val serviceIntent = Intent(context, MusicService::class.java)
             context.startService(serviceIntent)
         } catch (_: Exception) {
+        }
+
+        preferencesManager?.let { prefs ->
+            scope.launch {
+                launch {
+                    prefs.gaplessFlow.collect { isGaplessEnabled = it }
+                }
+                launch {
+                    prefs.autoplayFlow.collect { isAutoplayEnabled = it }
+                }
+                launch {
+                    val savedShuffle = prefs.shuffleFlow.first()
+                    _isShuffle.value = savedShuffle
+                    val savedRepeatName = prefs.repeatModeFlow.first()
+                    _repeatMode.value = GlassRepeatMode.entries.firstOrNull { it.name == savedRepeatName }
+                        ?: GlassRepeatMode.OFF
+
+                    val snapshot = withContext(Dispatchers.IO) { prefs.loadPlaybackSession() }
+                    if (snapshot != null && _queue.value.isEmpty() && _currentTrack.value == null) {
+                        val restoredTrack = snapshot.queue[snapshot.currentIndex]
+                        _queue.value = snapshot.queue
+                        _currentIndex.value = snapshot.currentIndex
+                        _currentTrack.value = restoredTrack
+                        _currentPosition.value = snapshot.positionMs
+                        _duration.value = if (restoredTrack.duration > 0) restoredTrack.duration * 1000L else 0L
+                        fetchLyrics(restoredTrack)
+                    }
+                }
+            }
         }
     }
 
@@ -217,12 +259,16 @@ class PlayerManager(
     private fun startProgressTracker() {
         progressJob?.cancel()
         progressJob = scope.launch {
+            var ticks = 0
             while (isActive) {
                 if (exoPlayer.isPlaying) {
                     _currentPosition.value = exoPlayer.currentPosition.coerceAtLeast(0L)
                     val dur = exoPlayer.duration
                     if (dur > 0) {
                         _duration.value = dur
+                    }
+                    if (++ticks % 20 == 0) {
+                        persistSession()
                     }
                 }
                 delay(250)
@@ -232,7 +278,44 @@ class PlayerManager(
 
     private fun stopProgressTracker() {
         progressJob?.cancel()
-        _currentPosition.value = exoPlayer.currentPosition.coerceAtLeast(0L)
+        if (exoPlayer.mediaItemCount > 0) {
+            _currentPosition.value = exoPlayer.currentPosition.coerceAtLeast(0L)
+        }
+        persistSession()
+    }
+
+    private fun persistSession() {
+        val prefs = preferencesManager ?: return
+        val q = _queue.value
+        val idx = _currentIndex.value
+        val pos = _currentPosition.value
+        persistJob?.cancel()
+        persistJob = scope.launch(Dispatchers.IO) {
+            if (q.isNotEmpty()) {
+                prefs.savePlaybackSession(q, idx, pos)
+            }
+        }
+    }
+
+    fun hasNextTrack(): Boolean {
+        val q = _queue.value
+        if (q.isEmpty()) return false
+        return _currentIndex.value < q.size - 1 ||
+            _isShuffle.value ||
+            _repeatMode.value != GlassRepeatMode.OFF ||
+            isAutoplayEnabled
+    }
+
+    fun resumeOrPlayCurrent() {
+        if (exoPlayer.playbackState == Player.STATE_ENDED) {
+            exoPlayer.seekTo(0)
+        }
+        if (exoPlayer.mediaItemCount == 0 && _currentTrack.value != null) {
+            playCurrentIndex(startPositionMs = _currentPosition.value)
+        } else {
+            exoPlayer.play()
+            _isPlaying.value = true
+        }
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = listOf(track)) {
@@ -265,6 +348,7 @@ class PlayerManager(
         val insertIndex = (_currentIndex.value + 1).coerceIn(0, currentList.size)
         currentList.add(insertIndex, track)
         _queue.value = currentList
+        persistSession()
     }
 
     fun addToQueue(track: Track) {
@@ -275,6 +359,7 @@ class PlayerManager(
         }
         currentList.add(track)
         _queue.value = currentList
+        persistSession()
     }
 
     private fun isValidPlayableUrl(url: String): Boolean {
@@ -300,7 +385,11 @@ class PlayerManager(
         return "Playback error: ${error.localizedMessage ?: "Stream tidak dapat diputar"}"
     }
 
-    private suspend fun prepareAndPlayStream(track: Track, resolvedUrl: String) {
+    private suspend fun prepareAndPlayStream(
+        track: Track,
+        resolvedUrl: String,
+        startPositionMs: Long = 0L
+    ) {
         val metadata = MediaMetadata.Builder()
             .setTitle(track.title)
             .setArtist(track.artist)
@@ -316,10 +405,13 @@ class PlayerManager(
 
         withContext(Dispatchers.Main) {
             exoPlayer.setMediaItem(mediaItem)
+            if (startPositionMs > 0L) {
+                exoPlayer.seekTo(startPositionMs)
+            }
             exoPlayer.prepare()
             exoPlayer.play()
             _isPlaying.value = true
-            _currentPosition.value = 0L
+            _currentPosition.value = startPositionMs
             _duration.value = if (track.duration > 0) track.duration * 1000L else 0L
 
             try {
@@ -330,7 +422,28 @@ class PlayerManager(
         }
     }
 
-    private fun playCurrentIndex() {
+    private fun prewarmNextTrackIfGapless() {
+        if (!isGaplessEnabled) return
+        val q = _queue.value
+        if (q.size <= 1) return
+        val nextIndex = if (_currentIndex.value + 1 < q.size) {
+            _currentIndex.value + 1
+        } else if (_repeatMode.value == GlassRepeatMode.ALL) {
+            0
+        } else {
+            return
+        }
+        val nextTrack = q[nextIndex]
+        prewarmJob?.cancel()
+        prewarmJob = scope.launch(Dispatchers.IO) {
+            try {
+                musicRepository.prewarmStreamUrl(nextTrack)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun playCurrentIndex(startPositionMs: Long = 0L) {
         val currentList = _queue.value
         val index = _currentIndex.value
         if (index !in currentList.indices) return
@@ -343,6 +456,7 @@ class PlayerManager(
         _lyrics.value = null
 
         fetchLyrics(track)
+        persistSession()
 
         playJob?.cancel()
         playJob = scope.launch {
@@ -402,7 +516,8 @@ class PlayerManager(
             }
 
             if (currentPlayToken != playToken) return@launch
-            prepareAndPlayStream(track, resolvedUrl)
+            prepareAndPlayStream(track, resolvedUrl, startPositionMs)
+            prewarmNextTrackIfGapless()
         }
     }
 
@@ -425,21 +540,16 @@ class PlayerManager(
             exoPlayer.pause()
             _isPlaying.value = false
         } else {
-            if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                exoPlayer.seekTo(0)
-            }
-            if (exoPlayer.mediaItemCount == 0 && _currentTrack.value != null) {
-                playCurrentIndex()
-            } else {
-                exoPlayer.play()
-                _isPlaying.value = true
-            }
+            resumeOrPlayCurrent()
         }
     }
 
     fun seekTo(positionMs: Long) {
         _currentPosition.value = positionMs
-        exoPlayer.seekTo(positionMs)
+        if (exoPlayer.mediaItemCount > 0) {
+            exoPlayer.seekTo(positionMs)
+        }
+        persistSession()
     }
 
     fun skipNext() {
@@ -447,8 +557,12 @@ class PlayerManager(
         if (q.isEmpty()) return
 
         if (_repeatMode.value == GlassRepeatMode.ONE) {
-            exoPlayer.seekTo(0)
-            exoPlayer.play()
+            if (exoPlayer.mediaItemCount > 0) {
+                exoPlayer.seekTo(0)
+                exoPlayer.play()
+            } else {
+                playCurrentIndex()
+            }
             return
         }
 
@@ -465,12 +579,15 @@ class PlayerManager(
         } else if (_repeatMode.value == GlassRepeatMode.ALL) {
             _currentIndex.value = 0
             playCurrentIndex()
+        } else if (isAutoplayEnabled) {
+            triggerAutoplaySimilarTrack(q.last())
         }
     }
 
     fun skipPrevious() {
-        if (exoPlayer.currentPosition > 3000) {
+        if (exoPlayer.mediaItemCount > 0 && exoPlayer.currentPosition > 3000) {
             exoPlayer.seekTo(0)
+            _currentPosition.value = 0L
             return
         }
 
@@ -483,14 +600,22 @@ class PlayerManager(
     }
 
     fun toggleShuffle() {
-        _isShuffle.value = !_isShuffle.value
+        val newVal = !_isShuffle.value
+        _isShuffle.value = newVal
+        preferencesManager?.let { prefs ->
+            scope.launch(Dispatchers.IO) { prefs.setShuffle(newVal) }
+        }
     }
 
     fun toggleRepeat() {
-        _repeatMode.value = when (_repeatMode.value) {
+        val nextMode = when (_repeatMode.value) {
             GlassRepeatMode.OFF -> GlassRepeatMode.ALL
             GlassRepeatMode.ALL -> GlassRepeatMode.ONE
             GlassRepeatMode.ONE -> GlassRepeatMode.OFF
+        }
+        _repeatMode.value = nextMode
+        preferencesManager?.let { prefs ->
+            scope.launch(Dispatchers.IO) { prefs.setRepeatMode(nextMode.name) }
         }
     }
 
@@ -533,6 +658,39 @@ class PlayerManager(
         _isLoading.value = false
     }
 
+    private fun triggerAutoplaySimilarTrack(seedTrack: Track) {
+        val tokenSnapshot = currentPlayToken
+        autoplayJob?.cancel()
+        autoplayJob = scope.launch {
+            _isLoading.value = true
+            val existingIds = _queue.value.map { it.id }.toSet()
+            val query = listOf(seedTrack.artist, seedTrack.title, "mix")
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+            val searchCandidates = withContext(Dispatchers.IO) {
+                val searched = if (query.isNotBlank()) {
+                    musicRepository.search(query, "songs").getOrNull().orEmpty()
+                } else emptyList()
+                val rec = if (searched.none { it.id !in existingIds }) {
+                    musicRepository.getRecommendations().getOrNull()?.get("trending").orEmpty()
+                } else emptyList()
+                (searched + rec).filter { it.id !in existingIds && it.title.isNotBlank() }
+            }
+
+            if (currentPlayToken != tokenSnapshot) return@launch
+            val nextPick = searchCandidates.firstOrNull()
+            if (nextPick != null) {
+                val updated = _queue.value + nextPick
+                _queue.value = updated
+                _currentIndex.value = updated.size - 1
+                playCurrentIndex()
+            } else {
+                _isLoading.value = false
+                _isPlaying.value = false
+            }
+        }
+    }
+
     private fun handleTrackEnded() {
         when (_repeatMode.value) {
             GlassRepeatMode.ONE -> {
@@ -546,6 +704,8 @@ class PlayerManager(
                 val q = _queue.value
                 if (_currentIndex.value < q.size - 1) {
                     skipNext()
+                } else if (isAutoplayEnabled && q.isNotEmpty()) {
+                    triggerAutoplaySimilarTrack(q.last())
                 } else {
                     _isPlaying.value = false
                 }
@@ -557,6 +717,9 @@ class PlayerManager(
         playJob?.cancel()
         lyricsJob?.cancel()
         progressJob?.cancel()
+        prewarmJob?.cancel()
+        autoplayJob?.cancel()
+        persistJob?.cancel()
         exoPlayer.removeListener(playerListener)
         exoPlayer.release()
     }

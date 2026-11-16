@@ -4,11 +4,23 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.glassroom.music.data.remote.NetworkClient
+import com.glassroom.music.domain.model.Track
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+
+data class PlaybackSessionSnapshot(
+    val queue: List<Track>,
+    val currentIndex: Int,
+    val positionMs: Long
+)
 
 private val Context.dataStore by preferencesDataStore(name = "glassroom_preferences")
 
@@ -23,6 +35,9 @@ class PreferencesManager(private val context: Context) {
         val KEY_SHUFFLE = booleanPreferencesKey("shuffle_state")
         val KEY_REPEAT = stringPreferencesKey("repeat_mode")
         val KEY_GLASS_INTENSITY = floatPreferencesKey("glass_intensity")
+        val KEY_LAST_QUEUE_JSON = stringPreferencesKey("last_playback_queue_json")
+        val KEY_LAST_INDEX = intPreferencesKey("last_playback_index")
+        val KEY_LAST_POSITION_MS = longPreferencesKey("last_playback_position_ms")
 
         private val LEGACY_DEV_HOSTS = listOf(
             "veloura-lilac-sigma.vercel.app",
@@ -74,6 +89,14 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_AUTOPLAY] ?: true
     }
 
+    val shuffleFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHUFFLE] ?: false
+    }
+
+    val repeatModeFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_REPEAT] ?: "OFF"
+    }
+
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = mode
@@ -112,6 +135,48 @@ class PreferencesManager(private val context: Context) {
     suspend fun setAutoplay(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_AUTOPLAY] = enabled
+        }
+    }
+
+    suspend fun setShuffle(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHUFFLE] = enabled
+        }
+    }
+
+    suspend fun setRepeatMode(mode: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_REPEAT] = mode
+        }
+    }
+
+    suspend fun savePlaybackSession(queue: List<Track>, index: Int, positionMs: Long) {
+        val cappedQueue = queue.take(100)
+        val json = try {
+            Gson().toJson(cappedQueue)
+        } catch (_: Exception) {
+            return
+        }
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_QUEUE_JSON] = json
+            prefs[KEY_LAST_INDEX] = index.coerceIn(0, (cappedQueue.size - 1).coerceAtLeast(0))
+            prefs[KEY_LAST_POSITION_MS] = positionMs.coerceAtLeast(0L)
+        }
+    }
+
+    suspend fun loadPlaybackSession(): PlaybackSessionSnapshot? {
+        return try {
+            val prefs = context.dataStore.data.first()
+            val json = prefs[KEY_LAST_QUEUE_JSON] ?: return null
+            if (json.isBlank()) return null
+            val listType = object : TypeToken<List<Track>>() {}.type
+            val queue: List<Track> = Gson().fromJson(json, listType) ?: return null
+            if (queue.isEmpty()) return null
+            val idx = (prefs[KEY_LAST_INDEX] ?: 0).coerceIn(0, queue.size - 1)
+            val pos = (prefs[KEY_LAST_POSITION_MS] ?: 0L).coerceAtLeast(0L)
+            PlaybackSessionSnapshot(queue = queue, currentIndex = idx, positionMs = pos)
+        } catch (_: Exception) {
+            null
         }
     }
 }

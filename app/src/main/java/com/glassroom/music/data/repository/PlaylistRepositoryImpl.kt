@@ -67,6 +67,10 @@ class PlaylistRepositoryImpl(
         return localDataSource.getFavoriteTracksFlow()
     }
 
+    override fun getFavoriteTrackIds(): Flow<Set<String>> {
+        return localDataSource.getFavoriteTrackIdsFlow()
+    }
+
     override suspend fun toggleFavorite(track: Track): Boolean {
         return localDataSource.toggleFavorite(track)
     }

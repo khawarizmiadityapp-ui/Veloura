@@ -25,7 +25,8 @@ class GlassroomContainer(context: Context) {
     val playerManager = PlayerManager(
         context = context,
         musicRepository = musicRepository,
-        playlistRepository = playlistRepository
+        playlistRepository = playlistRepository,
+        preferencesManager = preferencesManager
     )
 
     init {

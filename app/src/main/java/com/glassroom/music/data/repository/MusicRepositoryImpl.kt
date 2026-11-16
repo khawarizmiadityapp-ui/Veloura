@@ -28,6 +28,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class MusicRepositoryImpl(
@@ -645,6 +646,26 @@ class MusicRepositoryImpl(
         return null
     }
 
+    private data class CachedStreamUrl(
+        val url: String,
+        val expiresAtMs: Long
+    )
+
+    private val resolvedStreamCache = ConcurrentHashMap<String, CachedStreamUrl>()
+
+    private fun streamCacheKey(trackId: String, title: String, artist: String): String {
+        return trackId.ifBlank { "${title.lowercase()}|${artist.lowercase()}" }
+    }
+
+    override suspend fun prewarmStreamUrl(track: Track) {
+        val key = streamCacheKey(track.id, track.title, track.artist)
+        val cached = resolvedStreamCache[key]
+        if (cached != null && System.currentTimeMillis() < cached.expiresAtMs) {
+            return
+        }
+        resolveStreamUrl(track.id, track.title, track.artist)
+    }
+
     override suspend fun resolveStreamUrl(
         trackId: String,
         title: String,
@@ -673,6 +694,16 @@ class MusicRepositoryImpl(
         artist: String,
         forceSearchAlternative: Boolean
     ): Result<String> = withContext(Dispatchers.IO) {
+        val cacheKey = streamCacheKey(trackId, title, artist)
+        if (forceSearchAlternative) {
+            resolvedStreamCache.remove(cacheKey)
+        } else {
+            val cached = resolvedStreamCache[cacheKey]
+            if (cached != null && System.currentTimeMillis() < cached.expiresAtMs) {
+                return@withContext Result.success(cached.url)
+            }
+        }
+
         // Prioritas Pertama: Ekstraksi stream YouTube langsung on-device menggunakan IP HP pengguna
         // agar bebas dari blokir IP server cloud ("Sign in to confirm you're not a bot").
         val onDeviceUrl = try {
@@ -686,6 +717,13 @@ class MusicRepositoryImpl(
             !onDeviceUrl.contains("commondatastorage.googleapis.com") &&
             !onDeviceUrl.contains("codeskulptor")
         ) {
+            if (resolvedStreamCache.size > 128) {
+                resolvedStreamCache.clear()
+            }
+            resolvedStreamCache[cacheKey] = CachedStreamUrl(
+                url = onDeviceUrl,
+                expiresAtMs = System.currentTimeMillis() + 20L * 60L * 1000L
+            )
             return@withContext Result.success(onDeviceUrl)
         }
 

@@ -28,9 +28,21 @@ class SearchViewModel(
 
     private val searchQueryFlow = MutableStateFlow("")
 
+    @Volatile
+    private var favoriteIds: Set<String> = emptySet()
+
     val categories = listOf("Songs", "Artists", "Albums", "Playlists")
 
     init {
+        viewModelScope.launch {
+            playlistRepository.getFavoriteTrackIds().collect { favIds ->
+                favoriteIds = favIds
+                _uiState.update { state ->
+                    if (state.results.isEmpty()) state
+                    else state.copy(results = state.results.map { it.copy(isFavorite = it.id in favIds) })
+                }
+            }
+        }
         viewModelScope.launch {
             searchQueryFlow
                 .debounce(350)
@@ -63,10 +75,13 @@ class SearchViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = musicRepository.search(query, category.lowercase())
             if (result.isSuccess) {
+                val favIds = favoriteIds
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        results = result.getOrNull() ?: emptyList()
+                        results = (result.getOrNull() ?: emptyList()).map { track ->
+                            track.copy(isFavorite = track.id in favIds)
+                        }
                     )
                 }
             } else {

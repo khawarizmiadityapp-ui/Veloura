@@ -18,6 +18,7 @@ interface PlaylistRepository {
     
     // Favorites
     fun getFavoriteTracks(): Flow<List<Track>>
+    fun getFavoriteTrackIds(): Flow<Set<String>> = kotlinx.coroutines.flow.flowOf(emptySet())
     suspend fun toggleFavorite(track: Track): Boolean
     fun isFavorite(trackId: String): Flow<Boolean>
 

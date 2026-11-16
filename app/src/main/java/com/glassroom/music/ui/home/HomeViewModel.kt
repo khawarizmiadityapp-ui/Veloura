@@ -29,11 +29,35 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    @Volatile
+    private var favoriteIds: Set<String> = emptySet()
+
     init {
         updateGreeting()
+        observeFavoriteIds()
         loadRecommendations()
         observePlaylists()
         observeRecentlyPlayed()
+    }
+
+    private fun applyFavorites(tracks: List<Track>, favIds: Set<String>): List<Track> {
+        return tracks.map { track -> track.copy(isFavorite = track.id in favIds) }
+    }
+
+    private fun observeFavoriteIds() {
+        viewModelScope.launch {
+            playlistRepository.getFavoriteTrackIds().collect { favIds ->
+                favoriteIds = favIds
+                _uiState.update { state ->
+                    state.copy(
+                        popularSongs = applyFavorites(state.popularSongs, favIds),
+                        madeForYou = applyFavorites(state.madeForYou, favIds),
+                        recentlyPlayed = applyFavorites(state.recentlyPlayed, favIds),
+                        trending = applyFavorites(state.trending, favIds)
+                    )
+                }
+            }
+        }
     }
 
     private fun updateGreeting() {
@@ -53,12 +77,13 @@ class HomeViewModel(
             val result = musicRepository.getRecommendations()
             if (result.isSuccess) {
                 val data = result.getOrNull() ?: emptyMap()
+                val favIds = favoriteIds
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        popularSongs = data["popular"] ?: emptyList(),
-                        madeForYou = data["madeForYou"] ?: emptyList(),
-                        trending = data["trending"] ?: emptyList()
+                        popularSongs = applyFavorites(data["popular"] ?: emptyList(), favIds),
+                        madeForYou = applyFavorites(data["madeForYou"] ?: emptyList(), favIds),
+                        trending = applyFavorites(data["trending"] ?: emptyList(), favIds)
                     )
                 }
             } else {
@@ -86,7 +111,7 @@ class HomeViewModel(
         viewModelScope.launch {
             playlistRepository.getRecentlyPlayedTracks().collect { history ->
                 if (history.isNotEmpty()) {
-                    _uiState.update { it.copy(recentlyPlayed = history) }
+                    _uiState.update { it.copy(recentlyPlayed = applyFavorites(history, favoriteIds)) }
                 }
             }
         }
