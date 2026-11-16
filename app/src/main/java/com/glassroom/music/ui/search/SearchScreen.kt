@@ -30,6 +30,7 @@ fun SearchScreen(
     onTrackClick: (Track, List<Track>) -> Unit,
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
+    onTrackMoreClick: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -172,7 +173,8 @@ fun SearchScreen(
                         track = track,
                         isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
                         onClick = { onTrackClick(track, uiState.results) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                        onMoreClick = { onTrackMoreClick(track) }
                     )
                 }
             }

@@ -247,9 +247,9 @@ fun GlassSongCard(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "More",
-                        tint = glassConfig.textTertiary,
-                        modifier = Modifier.size(18.dp)
+                        contentDescription = "Track Options",
+                        tint = glassConfig.textSecondary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }

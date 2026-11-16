@@ -222,6 +222,26 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
         dbHelper.notifyPlaylistsChanged()
     }
 
+    suspend fun getPlaylistIdsContainingTrack(trackId: String): Set<String> = withContext(Dispatchers.IO) {
+        val db = dbHelper.readableDatabase
+        val result = mutableSetOf<String>()
+        val cursor = db.query(
+            GlassroomDbHelper.TABLE_PLAYLIST_TRACKS,
+            arrayOf("playlistId"),
+            "trackId = ?",
+            arrayOf(trackId),
+            null,
+            null,
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                result.add(it.getString(0))
+            }
+        }
+        result
+    }
+
     suspend fun reorderPlaylistTracks(playlistId: String, trackIdsInOrder: List<String>) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
         db.beginTransaction()

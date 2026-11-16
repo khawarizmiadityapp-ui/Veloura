@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -51,6 +52,7 @@ fun FullPlayerScreen(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onCollapse: () -> Unit,
+    onMoreOptions: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
@@ -437,24 +439,39 @@ fun FullPlayerScreen(
                     label = "fav_scale"
                 )
 
-                Box(modifier = Modifier.scale(favScale)) {
-                    GlassIconButton(
-                        icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        onClick = onToggleFavorite,
-                        tint = if (isFavorite) glassConfig.heartActive else glassConfig.textTertiary,
-                        backgroundBrush = if (isFavorite) {
-                            Brush.verticalGradient(
-                                when {
-                                    glassConfig.isPaper -> listOf(Color(0xFFFEE5D9), Color(0xFFFCD5C2))
-                                    glassConfig.isDark -> listOf(Color(0x40EF4444), Color(0x20F43F5E))
-                                    else -> listOf(Color(0xFFFFE4E6), Color(0xFFFECDD3))
-                                }
-                            )
-                        } else glassConfig.cardBrush,
-                        size = 48.dp,
-                        iconSize = 24.dp,
-                        contentDescription = "Favorite"
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.scale(favScale)) {
+                        GlassIconButton(
+                            icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            onClick = onToggleFavorite,
+                            tint = if (isFavorite) glassConfig.heartActive else glassConfig.textTertiary,
+                            backgroundBrush = if (isFavorite) {
+                                Brush.verticalGradient(
+                                    when {
+                                        glassConfig.isPaper -> listOf(Color(0xFFFEE5D9), Color(0xFFFCD5C2))
+                                        glassConfig.isDark -> listOf(Color(0x40EF4444), Color(0x20F43F5E))
+                                        else -> listOf(Color(0xFFFFE4E6), Color(0xFFFECDD3))
+                                    }
+                                )
+                            } else glassConfig.cardBrush,
+                            size = 46.dp,
+                            iconSize = 23.dp,
+                            contentDescription = "Favorite"
+                        )
+                    }
+
+                    if (onMoreOptions != null && currentTrack != null) {
+                        GlassIconButton(
+                            icon = Icons.Filled.MoreVert,
+                            onClick = { currentTrack?.let(onMoreOptions) },
+                            size = 46.dp,
+                            iconSize = 22.dp,
+                            contentDescription = "Track Options"
+                        )
+                    }
                 }
             }
 

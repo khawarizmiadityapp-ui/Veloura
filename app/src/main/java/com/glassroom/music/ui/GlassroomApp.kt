@@ -6,10 +6,19 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -19,6 +28,7 @@ import com.glassroom.music.GlassroomApplication
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.GlassBottomBar
 import com.glassroom.music.ui.components.GlassMiniPlayer
+import com.glassroom.music.ui.components.TrackOptionsSheet
 import com.glassroom.music.ui.home.HomeScreen
 import com.glassroom.music.ui.home.HomeViewModel
 import com.glassroom.music.ui.library.LibraryScreen
@@ -31,7 +41,9 @@ import com.glassroom.music.ui.search.SearchViewModel
 import com.glassroom.music.ui.playlist.PlaylistViewModel
 import com.glassroom.music.ui.playlist.PlaylistsScreen
 import com.glassroom.music.ui.settings.SettingsScreen
-import com.glassroom.music.ui.theme.GlassroomBackgroundBrush
+import com.glassroom.music.ui.theme.GlassTypography
+import com.glassroom.music.ui.theme.LocalGlassConfig
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -59,9 +71,29 @@ fun GlassroomApp(
     }
 
     val coroutineScope = rememberCoroutineScope()
+    val glassConfig = LocalGlassConfig.current
     val isCurrentFavorite by (currentTrack?.let {
         app.container.playlistRepository.isFavorite(it.id)
     } ?: kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+
+    val allPlaylists by app.container.playlistRepository.getAllPlaylists()
+        .collectAsState(initial = emptyList())
+    var selectedTrackOptions by remember { mutableStateOf<Pair<Track, String?>?>(null) }
+    var existingPlaylistIdsForTrack by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedTrackOptions) {
+        existingPlaylistIdsForTrack = selectedTrackOptions?.first?.let { track ->
+            app.container.playlistRepository.getPlaylistIdsContainingTrack(track.id)
+        } ?: emptySet()
+    }
+
+    LaunchedEffect(actionFeedbackMessage) {
+        if (actionFeedbackMessage != null) {
+            delay(2400L)
+            actionFeedbackMessage = null
+        }
+    }
 
     SharedTransitionLayout(
         modifier = modifier.fillMaxSize()
@@ -122,7 +154,10 @@ fun GlassroomApp(
                             navController.navigate(Screen.Search.route)
                         },
                         currentPlayingTrack = currentTrack,
-                        isPlaying = isPlaying
+                        isPlaying = isPlaying,
+                        onTrackMoreClick = { track ->
+                            selectedTrackOptions = track to null
+                        }
                     )
                 }
 
@@ -136,7 +171,10 @@ fun GlassroomApp(
                             playerManager.playTrack(track, queue)
                         },
                         currentPlayingTrack = currentTrack,
-                        isPlaying = isPlaying
+                        isPlaying = isPlaying,
+                        onTrackMoreClick = { track ->
+                            selectedTrackOptions = track to null
+                        }
                     )
                 }
 
@@ -153,7 +191,10 @@ fun GlassroomApp(
                             navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id))
                         },
                         currentPlayingTrack = currentTrack,
-                        isPlaying = isPlaying
+                        isPlaying = isPlaying,
+                        onTrackMoreClick = { track ->
+                            selectedTrackOptions = track to null
+                        }
                     )
                 }
 
@@ -185,7 +226,10 @@ fun GlassroomApp(
                             playerManager.playQueue(tracks)
                         },
                         currentPlayingTrack = currentTrack,
-                        isPlaying = isPlaying
+                        isPlaying = isPlaying,
+                        onTrackMoreClick = { track ->
+                            selectedTrackOptions = track to playlistId
+                        }
                     )
                 }
 
@@ -280,8 +324,121 @@ fun GlassroomApp(
                         }
                     },
                     onCollapse = { isFullPlayerExpanded = false },
+                    onMoreOptions = { track ->
+                        selectedTrackOptions = track to null
+                    },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this@AnimatedVisibility
+                )
+            }
+
+            // Action confirmation feedback pill
+            AnimatedVisibility(
+                visible = actionFeedbackMessage != null,
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(tween(180)),
+                exit = fadeOut(tween(180)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(
+                        horizontal = 24.dp,
+                        vertical = when {
+                            isFullPlayerExpanded -> 24.dp
+                            currentTrack != null -> 160.dp
+                            else -> 92.dp
+                        }
+                    )
+            ) {
+                actionFeedbackMessage?.let { msg ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = RoundedCornerShape(20.dp),
+                                ambientColor = glassConfig.shadowAmbient,
+                                spotColor = glassConfig.shadowSpot
+                            )
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(brush = glassConfig.miniPlayerBrush)
+                            .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = glassConfig.accentSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = msg,
+                            style = GlassTypography.labelLarge,
+                            color = glassConfig.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Shared Track Options & Add-to-Playlist Bottom Sheet
+            selectedTrackOptions?.let { (selectedTrack, sourcePlaylistId) ->
+                val isSelectedFavorite by app.container.playlistRepository
+                    .isFavorite(selectedTrack.id)
+                    .collectAsState(initial = selectedTrack.isFavorite)
+
+                TrackOptionsSheet(
+                    track = selectedTrack,
+                    playlists = allPlaylists,
+                    existingPlaylistIds = existingPlaylistIdsForTrack,
+                    isFavorite = isSelectedFavorite,
+                    sourcePlaylistId = sourcePlaylistId,
+                    onAddToPlaylist = { targetPlaylist ->
+                        coroutineScope.launch {
+                            app.container.playlistRepository.addTrackToPlaylist(targetPlaylist.id, selectedTrack)
+                            actionFeedbackMessage = if (targetPlaylist.id in existingPlaylistIdsForTrack) {
+                                "\"${selectedTrack.title}\" sudah ada di ${targetPlaylist.name}"
+                            } else {
+                                "Ditambahkan ke ${targetPlaylist.name}"
+                            }
+                        }
+                    },
+                    onCreatePlaylistAndAdd = { name, description ->
+                        coroutineScope.launch {
+                            val created = app.container.playlistRepository.createPlaylist(
+                                name = name,
+                                description = description,
+                                source = "local",
+                                artwork = selectedTrack.thumbnail
+                            )
+                            app.container.playlistRepository.addTrackToPlaylist(created.id, selectedTrack)
+                            actionFeedbackMessage = "Playlist \"$name\" dibuat & lagu ditambahkan"
+                        }
+                    },
+                    onPlayNext = {
+                        playerManager.playNext(selectedTrack)
+                        actionFeedbackMessage = "Akan diputar berikutnya"
+                    },
+                    onAddToQueue = {
+                        playerManager.addToQueue(selectedTrack)
+                        actionFeedbackMessage = "Ditambahkan ke antrean"
+                    },
+                    onToggleFavorite = {
+                        coroutineScope.launch {
+                            val nowFav = app.container.playlistRepository.toggleFavorite(selectedTrack)
+                            actionFeedbackMessage = if (nowFav) "Ditambahkan ke Favorit" else "Dihapus dari Favorit"
+                        }
+                    },
+                    onRemoveFromPlaylist = sourcePlaylistId?.let { plId ->
+                        {
+                            coroutineScope.launch {
+                                app.container.playlistRepository.removeTrackFromPlaylist(plId, selectedTrack.id)
+                                actionFeedbackMessage = "Dihapus dari playlist"
+                            }
+                        }
+                    },
+                    onDismiss = { selectedTrackOptions = null }
                 )
             }
         }

@@ -42,6 +42,7 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
+    onTrackMoreClick: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -224,7 +225,8 @@ fun HomeScreen(
                         track = track,
                         isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
                         onClick = { onTrackClick(track, uiState.popularSongs) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                        onMoreClick = { onTrackMoreClick(track) }
                     )
                 }
             }
@@ -302,7 +304,8 @@ fun HomeScreen(
                         track = track,
                         isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
                         onClick = { onTrackClick(track, uiState.trending) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                        onMoreClick = { onTrackMoreClick(track) }
                     )
                 }
             }

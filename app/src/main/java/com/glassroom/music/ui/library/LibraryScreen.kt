@@ -33,6 +33,7 @@ fun LibraryScreen(
     onPlaylistClick: (Playlist) -> Unit,
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
+    onTrackMoreClick: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -77,7 +78,8 @@ fun LibraryScreen(
                         currentPlayingTrack = currentPlayingTrack,
                         isPlaying = isPlaying,
                         onTrackClick = onTrackClick,
-                        onFavoriteClick = viewModel::toggleFavorite
+                        onFavoriteClick = viewModel::toggleFavorite,
+                        onMoreClick = onTrackMoreClick
                     )
                 }
             }
@@ -94,7 +96,8 @@ fun LibraryScreen(
                         currentPlayingTrack = currentPlayingTrack,
                         isPlaying = isPlaying,
                         onTrackClick = onTrackClick,
-                        onFavoriteClick = viewModel::toggleFavorite
+                        onFavoriteClick = viewModel::toggleFavorite,
+                        onMoreClick = onTrackMoreClick
                     )
                 }
             }
@@ -202,7 +205,8 @@ private fun TrackList(
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
     onTrackClick: (Track, List<Track>) -> Unit,
-    onFavoriteClick: (Track) -> Unit
+    onFavoriteClick: (Track) -> Unit,
+    onMoreClick: (Track) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -217,7 +221,8 @@ private fun TrackList(
                 track = track,
                 isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
                 onClick = { onTrackClick(track, tracks) },
-                onFavoriteClick = { onFavoriteClick(track) }
+                onFavoriteClick = { onFavoriteClick(track) },
+                onMoreClick = { onMoreClick(track) }
             )
         }
     }

@@ -14,6 +14,7 @@ interface PlaylistRepository {
     suspend fun addTrackToPlaylist(playlistId: String, track: Track)
     suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String)
     suspend fun reorderPlaylistTracks(playlistId: String, trackIdsInOrder: List<String>)
+    suspend fun getPlaylistIdsContainingTrack(trackId: String): Set<String> = emptySet()
     
     // Favorites
     fun getFavoriteTracks(): Flow<List<Track>>

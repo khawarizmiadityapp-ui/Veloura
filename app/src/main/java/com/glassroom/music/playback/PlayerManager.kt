@@ -256,6 +256,27 @@ class PlayerManager(
         playCurrentIndex()
     }
 
+    fun playNext(track: Track) {
+        val currentList = _queue.value.toMutableList()
+        if (currentList.isEmpty()) {
+            playTrack(track)
+            return
+        }
+        val insertIndex = (_currentIndex.value + 1).coerceIn(0, currentList.size)
+        currentList.add(insertIndex, track)
+        _queue.value = currentList
+    }
+
+    fun addToQueue(track: Track) {
+        val currentList = _queue.value.toMutableList()
+        if (currentList.isEmpty()) {
+            playTrack(track)
+            return
+        }
+        currentList.add(track)
+        _queue.value = currentList
+    }
+
     private fun isValidPlayableUrl(url: String): Boolean {
         return url.isNotBlank() &&
             (url.startsWith("http://") || url.startsWith("https://")) &&

@@ -59,6 +59,10 @@ class PlaylistRepositoryImpl(
         localDataSource.reorderPlaylistTracks(playlistId, trackIdsInOrder)
     }
 
+    override suspend fun getPlaylistIdsContainingTrack(trackId: String): Set<String> {
+        return localDataSource.getPlaylistIdsContainingTrack(trackId)
+    }
+
     override fun getFavoriteTracks(): Flow<List<Track>> {
         return localDataSource.getFavoriteTracksFlow()
     }

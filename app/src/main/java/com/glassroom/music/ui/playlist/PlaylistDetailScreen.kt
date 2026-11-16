@@ -44,6 +44,7 @@ fun PlaylistDetailScreen(
     onPlayAll: (List<Track>) -> Unit,
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
+    onTrackMoreClick: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val playlistWithTracks by playlistRepository.getPlaylistWithTracks(playlistId).collectAsState(initial = null)
@@ -233,8 +234,12 @@ fun PlaylistDetailScreen(
                                 }
                             },
                             onMoreClick = {
-                                coroutineScope.launch {
-                                    playlistRepository.removeTrackFromPlaylist(playlistId, track.id)
+                                if (onTrackMoreClick != null) {
+                                    onTrackMoreClick(track)
+                                } else {
+                                    coroutineScope.launch {
+                                        playlistRepository.removeTrackFromPlaylist(playlistId, track.id)
+                                    }
                                 }
                             }
                         )
