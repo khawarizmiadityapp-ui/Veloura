@@ -120,10 +120,10 @@ fun GlassLyricsView(
             .fillMaxWidth()
             .height(350.dp)
             .shadow(
-                elevation = 24.dp,
+                elevation = if (glassConfig.isPaper) 10.dp else 24.dp,
                 shape = RoundedCornerShape(32.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2A38BDF8),
-                spotColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x1F818CF8)
+                ambientColor = if (glassConfig.isPaper) glassConfig.shadowAmbient else if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2A38BDF8),
+                spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x1F818CF8)
             )
             .clip(RoundedCornerShape(32.dp))
             .background(brush = glassConfig.cardBrush)
@@ -143,7 +143,7 @@ fun GlassLyricsView(
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(42.dp),
-                        color = GlassAccentCobalt,
+                        color = glassConfig.accentPrimary,
                         strokeWidth = 3.dp
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -287,20 +287,26 @@ fun GlassLyricsView(
                             )
 
                             val textColor = when {
-                                isActive -> if (glassConfig.isDark) Color.White else Color(0xFF0F172A)
-                                else -> if (glassConfig.isDark) Color(0x88FFFFFF) else Color(0x660F172A)
+                                isActive -> glassConfig.textPrimary
+                                else -> glassConfig.textPrimary.copy(alpha = if (glassConfig.isDark) 0.55f else 0.45f)
                             }
 
-                            val activePillBrush = if (glassConfig.isDark) {
-                                Brush.horizontalGradient(
+                            val activePillBrush = when {
+                                glassConfig.isPaper -> Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0x24B45309),
+                                        Color(0x182E6F4E),
+                                        Color(0x1FB45309)
+                                    )
+                                )
+                                glassConfig.isDark -> Brush.horizontalGradient(
                                     listOf(
                                         Color(0x3806B6D4),
                                         Color(0x298B5CF6),
                                         Color(0x3310B981)
                                     )
                                 )
-                            } else {
-                                Brush.horizontalGradient(
+                                else -> Brush.horizontalGradient(
                                     listOf(
                                         Color(0x3338BDF8),
                                         Color(0x22818CF8),
@@ -309,16 +315,22 @@ fun GlassLyricsView(
                                 )
                             }
 
-                            val activeBorderBrush = if (glassConfig.isDark) {
-                                Brush.horizontalGradient(
+                            val activeBorderBrush = when {
+                                glassConfig.isPaper -> Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0x88B45309),
+                                        Color(0x662E6F4E),
+                                        Color(0x88D8CAB4)
+                                    )
+                                )
+                                glassConfig.isDark -> Brush.horizontalGradient(
                                     listOf(
                                         Color(0x9906B6D4),
                                         Color(0x808B5CF6),
                                         Color(0x99FFFFFF)
                                     )
                                 )
-                            } else {
-                                Brush.horizontalGradient(
+                                else -> Brush.horizontalGradient(
                                     listOf(
                                         Color(0x9938BDF8),
                                         Color(0x80818CF8),
@@ -336,10 +348,10 @@ fun GlassLyricsView(
                                         if (isActive) {
                                             Modifier
                                                 .shadow(
-                                                    elevation = 14.dp,
+                                                    elevation = if (glassConfig.isPaper) 6.dp else 14.dp,
                                                     shape = RoundedCornerShape(18.dp),
-                                                    ambientColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x2638BDF8),
-                                                    spotColor = if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2B818CF8)
+                                                    ambientColor = if (glassConfig.isPaper) glassConfig.shadowAmbient else if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x2638BDF8),
+                                                    spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else if (glassConfig.isDark) Color(0x668B5CF6) else Color(0x2B818CF8)
                                                 )
                                                 .clip(RoundedCornerShape(18.dp))
                                                 .background(brush = activePillBrush)
@@ -377,7 +389,7 @@ fun GlassLyricsView(
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             MiniEqualizerBars(
                                                 isPlaying = true,
-                                                color = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+                                                color = glassConfig.accentPrimary
                                             )
                                             Spacer(modifier = Modifier.width(10.dp))
                                         }
@@ -418,13 +430,13 @@ fun GlassLyricsView(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(GlassAccentCobalt)
+                                .background(glassConfig.accentPrimary)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "PLAIN LYRICS",
                             style = GlassTypography.labelSmall,
-                            color = GlassAccentCobalt,
+                            color = glassConfig.accentPrimary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )

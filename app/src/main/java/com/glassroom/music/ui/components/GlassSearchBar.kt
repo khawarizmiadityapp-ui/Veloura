@@ -97,10 +97,10 @@ fun GlassSearchBar(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 6.dp,
+                elevation = if (glassConfig.isPaper) 3.dp else 6.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A),
-                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0A0F172A)
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = glassConfig.shadowSpot
             )
             .clip(RoundedCornerShape(24.dp))
             .background(brush = glassConfig.miniPlayerBrush)
@@ -174,46 +174,27 @@ fun GlassChip(
 ) {
     val glassConfig = LocalGlassConfig.current
     val bgBrush = if (isSelected) {
-        if (glassConfig.isDark) {
-            Brush.horizontalGradient(
-                colors = listOf(
-                    GlassAccentCobalt,
-                    Color(0xFF2563EB)
-                )
-            )
-        } else {
-            Brush.horizontalGradient(
-                colors = listOf(
-                    Color(0xFF1E293B),
-                    Color(0xFF0F172A)
-                )
-            )
-        }
+        glassConfig.primaryButtonBrush
     } else {
-        if (glassConfig.isDark) {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0x2EFFFFFF),
-                    Color(0x14FFFFFF)
-                )
-            )
-        } else {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xE0FFFFFF),
-                    Color(0x99FFFFFF)
-                )
-            )
-        }
+        glassConfig.chipUnselectedBrush
     }
     val textColor = if (isSelected) Color.White else glassConfig.textSecondary
     val borderBrush = if (isSelected) {
-        Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = 0.6f),
-                Color.White.copy(alpha = 0.2f)
+        if (glassConfig.isPaper) {
+            Brush.verticalGradient(
+                listOf(
+                    Color(0x40FFFFFF),
+                    Color(0x33000000)
+                )
             )
-        )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.6f),
+                    Color.White.copy(alpha = 0.2f)
+                )
+            )
+        }
     } else {
         glassConfig.borderBrush
     }
@@ -221,9 +202,9 @@ fun GlassChip(
     Box(
         modifier = modifier
             .shadow(
-                elevation = if (isSelected) 4.dp else 2.dp,
+                elevation = if (glassConfig.isPaper) (if (isSelected) 2.dp else 1.dp) else (if (isSelected) 4.dp else 2.dp),
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x100F172A)
+                ambientColor = glassConfig.shadowAmbient
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = bgBrush)

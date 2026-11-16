@@ -100,7 +100,7 @@ fun PlaylistsScreen(
                     Box(
                         modifier = Modifier
                             .size(72.dp)
-                            .shadow(6.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A))
+                            .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
                             .clip(CircleShape)
                             .background(brush = glassConfig.cardBrush)
                             .border(1.dp, glassConfig.borderBrush, CircleShape),
@@ -183,12 +183,7 @@ fun PlaylistsScreen(
                                         modifier = Modifier
                                             .size(54.dp)
                                             .clip(RoundedCornerShape(14.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    if (glassConfig.isDark) listOf(Color(0xFF222B3D), Color(0xFF161F2E))
-                                                    else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                                                )
-                                            )
+                                            .background(glassConfig.placeholderBrush)
                                             .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(14.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -236,7 +231,7 @@ fun PlaylistsScreen(
 
     // Spotify Import Glass Dialog
     if (uiState.showImportDialog) {
-        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
+        val inputBg = glassConfig.inputSurfaceColor
         GlassDialog(onDismissRequest = { viewModel.closeImportDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -290,7 +285,7 @@ fun PlaylistsScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
-                                color = GlassAccentCobalt
+                                color = glassConfig.accentPrimary
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
@@ -315,8 +310,8 @@ fun PlaylistsScreen(
                                     .fillMaxWidth()
                                     .height(6.dp)
                                     .clip(CircleShape),
-                                color = GlassAccentCobalt,
-                                trackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x1F0F172A)
+                                color = glassConfig.accentPrimary,
+                                trackColor = glassConfig.inactiveTrackColor
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
@@ -414,7 +409,7 @@ fun PlaylistsScreen(
 
     // Create New Playlist Dialog
     if (uiState.showCreateDialog) {
-        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
+        val inputBg = glassConfig.inputSurfaceColor
         GlassDialog(onDismissRequest = { viewModel.closeCreateDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(

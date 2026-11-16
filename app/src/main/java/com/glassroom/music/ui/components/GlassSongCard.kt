@@ -63,32 +63,13 @@ fun GlassSongCard(
     )
 
     val cardBg = if (isPlaying) {
-        if (glassConfig.isDark) {
-            Brush.horizontalGradient(
-                listOf(
-                    Color(0xFF263248),
-                    Color(0xFF1B2332)
-                )
-            )
-        } else {
-            Brush.horizontalGradient(
-                listOf(
-                    Color(0xFFFFFFFF),
-                    Color(0xFFEFF6FF)
-                )
-            )
-        }
+        glassConfig.activePlayingCardBrush
     } else {
         glassConfig.cardBrush
     }
 
     val borderBrush = if (isPlaying) {
-        Brush.verticalGradient(
-            listOf(
-                GlassAccentCobalt,
-                GlassAccentCobalt.copy(alpha = 0.5f)
-            )
-        )
+        glassConfig.activePlayingBorderBrush
     } else {
         glassConfig.borderBrush
     }
@@ -98,10 +79,10 @@ fun GlassSongCard(
             .scale(cardScale)
             .fillMaxWidth()
             .shadow(
-                elevation = if (isPlaying) 6.dp else 2.dp,
+                elevation = if (glassConfig.isPaper) (if (isPlaying) 3.dp else 1.dp) else (if (isPlaying) 6.dp else 2.dp),
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x100F172A),
-                spotColor = if (isPlaying) (if (glassConfig.isDark) Color(0x333B82F6) else Color(0x263B82F6)) else Color.Transparent
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = if (isPlaying) glassConfig.accentPrimary.copy(alpha = 0.22f) else Color.Transparent
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = cardBg)
@@ -126,16 +107,11 @@ fun GlassSongCard(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        Brush.linearGradient(
-                            if (glassConfig.isDark) listOf(Color(0xFF222B3D), Color(0xFF171D29))
-                            else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                        )
-                    )
+                    .background(glassConfig.placeholderBrush)
                     .border(
                         width = 0.8.dp,
                         brush = if (glassConfig.isDark) Brush.verticalGradient(listOf(Color(0x33FFFFFF), Color(0x0FFFFFFF)))
-                        else Brush.verticalGradient(listOf(Color(0x80FFFFFF), Color(0x20FFFFFF))),
+                        else Brush.verticalGradient(listOf(glassConfig.borderHighlight, glassConfig.borderSubtle)),
                         shape = RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -155,7 +131,7 @@ fun GlassSongCard(
                     Icon(
                         imageVector = Icons.Filled.MusicNote,
                         contentDescription = null,
-                        tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                        tint = glassConfig.textSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -172,7 +148,7 @@ fun GlassSongCard(
                     Text(
                         text = track.title,
                         style = GlassTypography.titleMedium,
-                        color = if (isPlaying) GlassAccentCobalt else glassConfig.textPrimary,
+                        color = if (isPlaying) glassConfig.accentPrimary else glassConfig.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
@@ -183,7 +159,7 @@ fun GlassSongCard(
                         Icon(
                             imageVector = Icons.Outlined.GraphicEq,
                             contentDescription = "Currently Playing",
-                            tint = GlassAccentCobalt,
+                            tint = glassConfig.accentPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -222,7 +198,7 @@ fun GlassSongCard(
                 )
 
                 val heartColor by animateColorAsState(
-                    targetValue = if (track.isFavorite) GlassHeartActive else glassConfig.textTertiary,
+                    targetValue = if (track.isFavorite) glassConfig.heartActive else glassConfig.textTertiary,
                     animationSpec = tween(durationMillis = 200),
                     label = "heart_color"
                 )

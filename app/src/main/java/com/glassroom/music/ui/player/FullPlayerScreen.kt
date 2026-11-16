@@ -125,7 +125,7 @@ fun FullPlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (glassConfig.isDark) Color(0xFF070A10) else Color(0xFFF6F7FB))
+            .background(glassConfig.baseSolidColor)
     ) {
         VelouraBackdrop(
             currentTrack = currentTrack,
@@ -136,7 +136,13 @@ fun FullPlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(if (glassConfig.isDark) Color(0x4D070A10) else Color(0x40FFFFFF))
+                .background(
+                    when {
+                        glassConfig.isPaper -> Color(0x28FAF6EE)
+                        glassConfig.isDark -> Color(0x4D070A10)
+                        else -> Color(0x40FFFFFF)
+                    }
+                )
         )
         // Soft ambient glow background circle behind artwork inspired by current album colors
         Box(
@@ -148,8 +154,20 @@ fun FullPlayerScreen(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            artworkColors.primary.copy(alpha = if (glassConfig.isDark) 0.50f else 0.32f),
-                            artworkColors.secondary.copy(alpha = if (glassConfig.isDark) 0.26f else 0.16f),
+                            artworkColors.primary.copy(
+                                alpha = when {
+                                    glassConfig.isPaper -> 0.14f
+                                    glassConfig.isDark -> 0.50f
+                                    else -> 0.32f
+                                }
+                            ),
+                            artworkColors.secondary.copy(
+                                alpha = when {
+                                    glassConfig.isPaper -> 0.08f
+                                    glassConfig.isDark -> 0.26f
+                                    else -> 0.16f
+                                }
+                            ),
                             Color.Transparent
                         )
                     )
@@ -193,7 +211,7 @@ fun FullPlayerScreen(
                             .width(36.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x2A0F172A))
+                            .background(glassConfig.inactiveTrackColor)
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -230,12 +248,9 @@ fun FullPlayerScreen(
                             onClick = { showLyrics = !showLyrics },
                             size = 44.dp,
                             iconSize = 22.dp,
-                            tint = if (showLyrics) GlassAccentMint else glassConfig.textTertiary,
+                            tint = if (showLyrics) glassConfig.accentSecondary else glassConfig.textTertiary,
                             backgroundBrush = if (showLyrics) {
-                                Brush.verticalGradient(
-                                    if (glassConfig.isDark) listOf(Color(0x6606B6D4), Color(0x330891B2))
-                                    else listOf(Color(0xFFCCFBF1), Color(0xFF99F6E4))
-                                )
+                                glassConfig.toggleActiveBrush
                             } else glassConfig.cardBrush,
                             contentDescription = "Toggle Lyrics"
                         )
@@ -316,10 +331,10 @@ fun FullPlayerScreen(
                                 .size(285.dp)
                                 .scale(artworkScale)
                                 .shadow(
-                                    elevation = 28.dp,
+                                    elevation = if (glassConfig.isPaper) 16.dp else 28.dp,
                                     shape = RoundedCornerShape(32.dp),
-                                    ambientColor = artworkColors.primary.copy(alpha = if (glassConfig.isDark) 0.55f else 0.25f),
-                                    spotColor = artworkColors.secondary.copy(alpha = if (glassConfig.isDark) 0.40f else 0.18f)
+                                    ambientColor = if (glassConfig.isPaper) glassConfig.shadowAmbient else artworkColors.primary.copy(alpha = if (glassConfig.isDark) 0.55f else 0.25f),
+                                    spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else artworkColors.secondary.copy(alpha = if (glassConfig.isDark) 0.40f else 0.18f)
                                 )
                                 .clip(RoundedCornerShape(32.dp))
                                 .background(brush = glassConfig.cardBrush)
@@ -334,7 +349,7 @@ fun FullPlayerScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(26.dp))
-                                    .background(if (glassConfig.isDark) Color(0xFF1E2638) else Color(0xFFE2E8F0)),
+                                    .background(glassConfig.placeholderBrush),
                                 contentAlignment = Alignment.Center
                             ) {
                                 AnimatedContent(
@@ -359,18 +374,13 @@ fun FullPlayerScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
-                                                .background(
-                                                    Brush.radialGradient(
-                                                        colors = if (glassConfig.isDark) listOf(Color(0xFF26324A), Color(0xFF161F30))
-                                                        else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                                                    )
-                                                ),
+                                                .background(glassConfig.placeholderBrush),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Filled.MusicNote,
                                                 contentDescription = null,
-                                                tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                                tint = glassConfig.textSecondary,
                                                 modifier = Modifier.size(64.dp)
                                             )
                                         }
@@ -431,11 +441,14 @@ fun FullPlayerScreen(
                     GlassIconButton(
                         icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         onClick = onToggleFavorite,
-                        tint = if (isFavorite) GlassHeartActive else glassConfig.textTertiary,
+                        tint = if (isFavorite) glassConfig.heartActive else glassConfig.textTertiary,
                         backgroundBrush = if (isFavorite) {
                             Brush.verticalGradient(
-                                if (glassConfig.isDark) listOf(Color(0x40EF4444), Color(0x20F43F5E))
-                                else listOf(Color(0xFFFFE4E6), Color(0xFFFECDD3))
+                                when {
+                                    glassConfig.isPaper -> listOf(Color(0xFFFEE5D9), Color(0xFFFCD5C2))
+                                    glassConfig.isDark -> listOf(Color(0x40EF4444), Color(0x20F43F5E))
+                                    else -> listOf(Color(0xFFFFE4E6), Color(0xFFFECDD3))
+                                }
                             )
                         } else glassConfig.cardBrush,
                         size = 48.dp,

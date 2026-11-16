@@ -125,12 +125,7 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .size(44.dp)
                                             .clip(CircleShape)
-                                            .background(
-                                                Brush.linearGradient(
-                                                    if (glassConfig.isDark) listOf(Color(0xFF242E40), Color(0xFF161F2E))
-                                                    else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                                                )
-                                            )
+                                            .background(glassConfig.placeholderBrush)
                                             .border(1.dp, glassConfig.borderBrush, CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -241,7 +236,7 @@ private fun EmptyLibraryState(title: String, subtitle: String) {
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .shadow(6.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A))
+                    .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
                     .clip(CircleShape)
                     .background(brush = glassConfig.cardBrush)
                     .border(1.dp, glassConfig.borderBrush, CircleShape),

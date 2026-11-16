@@ -47,7 +47,7 @@ fun QueueSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (glassConfig.isDark) Color(0xF2121824) else Color(0xF7FFFFFF),
+        containerColor = glassConfig.sheetContainerColor,
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         dragHandle = {
             Box(
@@ -56,7 +56,7 @@ fun QueueSheet(
                     .width(44.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x330F172A))
+                    .background(glassConfig.inactiveTrackColor)
             )
         }
     ) {

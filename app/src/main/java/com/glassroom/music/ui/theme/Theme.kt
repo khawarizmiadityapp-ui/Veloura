@@ -44,14 +44,40 @@ private val DarkColorScheme = darkColorScheme(
     outline = Color(0x33FFFFFF)
 )
 
+private val PaperColorScheme = lightColorScheme(
+    primary = Color(0xFF2E251D),
+    onPrimary = Color(0xFFFAF6EE),
+    primaryContainer = Color(0xFFF6ECDA),
+    onPrimaryContainer = PaperTextPrimary,
+    secondary = PaperAccentTerracotta,
+    onSecondary = Color.White,
+    background = PaperBgTop,
+    onBackground = PaperTextPrimary,
+    surface = Color(0xFFFFFDF8),
+    onSurface = PaperTextPrimary,
+    surfaceVariant = Color(0xFFEEE5D3),
+    onSurfaceVariant = PaperTextSecondary,
+    outline = Color(0xFFD8CAB4)
+)
+
 @Composable
 fun GlassroomTheme(
     darkTheme: Boolean = false,
+    paperTheme: Boolean = false,
     glassIntensity: Float = 0.75f,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val glassConfig = GlassConfig(isDark = darkTheme, intensity = glassIntensity)
+    val effectiveDark = darkTheme && !paperTheme
+    val colorScheme = when {
+        paperTheme -> PaperColorScheme
+        effectiveDark -> DarkColorScheme
+        else -> LightColorScheme
+    }
+    val glassConfig = GlassConfig(
+        isDark = effectiveDark,
+        isPaper = paperTheme,
+        intensity = glassIntensity
+    )
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -60,8 +86,8 @@ fun GlassroomTheme(
             if (activity != null) {
                 val window = activity.window
                 val controller = WindowCompat.getInsetsController(window, view)
-                controller.isAppearanceLightStatusBars = !darkTheme
-                controller.isAppearanceLightNavigationBars = !darkTheme
+                controller.isAppearanceLightStatusBars = !effectiveDark
+                controller.isAppearanceLightNavigationBars = !effectiveDark
             }
         }
     }

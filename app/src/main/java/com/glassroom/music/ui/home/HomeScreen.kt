@@ -73,9 +73,9 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(48.dp)
                                 .shadow(
-                                    elevation = 8.dp,
+                                    elevation = if (glassConfig.isPaper) 4.dp else 8.dp,
                                     shape = RoundedCornerShape(18.dp),
-                                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A)
+                                    ambientColor = glassConfig.shadowAmbient
                                 )
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(brush = glassConfig.cardBrush)

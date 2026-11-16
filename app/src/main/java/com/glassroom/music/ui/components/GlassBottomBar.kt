@@ -62,10 +62,10 @@ fun GlassBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = 16.dp,
+                    elevation = if (glassConfig.isPaper) 10.dp else 16.dp,
                     shape = RoundedCornerShape(32.dp),
-                    ambientColor = if (glassConfig.isDark) Color(0x40000000) else Color(0x180F172A),
-                    spotColor = if (glassConfig.isDark) Color(0x2D000000) else Color(0x100F172A)
+                    ambientColor = glassConfig.shadowAmbient,
+                    spotColor = glassConfig.shadowSpot
                 )
                 .clip(RoundedCornerShape(32.dp))
                 .background(brush = glassConfig.miniPlayerBrush)
@@ -87,7 +87,7 @@ fun GlassBottomBar(
                     val isPressed by interactionSource.collectIsPressedAsState()
 
                     val targetColor = if (isSelected) {
-                        if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+                        glassConfig.accentPrimary
                     } else {
                         glassConfig.textTertiary
                     }
@@ -108,13 +108,13 @@ fun GlassBottomBar(
                     )
 
                     val pillBg = if (isSelected) {
-                        if (glassConfig.isDark) Color(0x2638BDF8) else Color(0x1F0284C7)
+                        glassConfig.activePillBg
                     } else {
                         Color.Transparent
                     }
 
                     val pillBorder = if (isSelected) {
-                        if (glassConfig.isDark) Color(0x4038BDF8) else Color(0x2E0284C7)
+                        glassConfig.activePillBorder
                     } else {
                         Color.Transparent
                     }

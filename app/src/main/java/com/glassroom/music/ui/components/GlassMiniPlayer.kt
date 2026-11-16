@@ -170,10 +170,10 @@ fun GlassMiniPlayer(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .shadow(
-                elevation = 14.dp,
+                elevation = if (glassConfig.isPaper) 9.dp else 14.dp,
                 shape = RoundedCornerShape(26.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x40000000) else Color(0x1F0F172A),
-                spotColor = if (glassConfig.isDark) Color(0x2D000000) else Color(0x140F172A)
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = glassConfig.shadowSpot
             )
             .clip(RoundedCornerShape(26.dp))
             .background(brush = glassConfig.miniPlayerBrush)
@@ -204,18 +204,13 @@ fun GlassMiniPlayer(
                     modifier = artworkSharedModifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            Brush.linearGradient(
-                                if (glassConfig.isDark) listOf(Color(0xFF26324A), Color(0xFF161F30))
-                                else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                            )
-                        )
+                        .background(glassConfig.placeholderBrush)
                         .border(
                             width = 0.8.dp,
                             brush = if (glassConfig.isDark) Brush.verticalGradient(
                                 listOf(Color(0x40FFFFFF), Color(0x10FFFFFF))
                             ) else Brush.verticalGradient(
-                                listOf(Color(0x80FFFFFF), Color(0x20FFFFFF))
+                                listOf(glassConfig.borderHighlight, glassConfig.borderSubtle)
                             ),
                             shape = RoundedCornerShape(14.dp)
                         ),
@@ -243,7 +238,7 @@ fun GlassMiniPlayer(
                             Icon(
                                 imageVector = Icons.Filled.MusicNote,
                                 contentDescription = null,
-                                tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                tint = glassConfig.textSecondary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -288,10 +283,11 @@ fun GlassMiniPlayer(
                     modifier = Modifier
                         .scale(playBtnScale)
                         .size(42.dp)
-                        .shadow(6.dp, CircleShape, spotColor = Color(0x3338BDF8))
+                        .shadow(4.dp, CircleShape, spotColor = glassConfig.shadowSpot)
                         .clip(CircleShape)
                         .background(
-                            brush = Brush.verticalGradient(
+                            brush = if (glassConfig.isPaper) glassConfig.primaryButtonBrush
+                            else Brush.verticalGradient(
                                 if (glassConfig.isDark) listOf(Color(0xFF1E293B), Color(0xFF0F172A))
                                 else listOf(Color(0xFF1E293B), Color(0xFF334155))
                             )
@@ -347,7 +343,7 @@ fun GlassMiniPlayer(
                         .scale(nextBtnScale)
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(if (glassConfig.isDark) Color(0x1AFFFFFF) else Color(0x140F172A))
+                        .background(glassConfig.inactiveTrackColor)
                         .clickable(
                             interactionSource = nextInteractionSource,
                             indication = null,
@@ -370,7 +366,7 @@ fun GlassMiniPlayer(
                     .fillMaxWidth()
                     .height(3.dp)
                     .clip(RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp))
-                    .background(if (glassConfig.isDark) Color(0x1AFFFFFF) else Color(0x140F172A))
+                    .background(glassConfig.inactiveTrackColor)
             ) {
                 Box(
                     modifier = Modifier
@@ -378,7 +374,7 @@ fun GlassMiniPlayer(
                         .fillMaxHeight()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(GlassAccentCobalt, GlassAccentMint)
+                                listOf(glassConfig.accentPrimary, glassConfig.accentSecondary)
                             )
                         )
                 )

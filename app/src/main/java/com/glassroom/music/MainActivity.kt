@@ -32,9 +32,10 @@ class MainActivity : ComponentActivity() {
             val glassIntensity by app.container.preferencesManager.glassIntensityFlow.collectAsState(initial = 0.75f)
 
             val isSystemDark = isSystemInDarkTheme()
+            val isPaper = themeMode == "paper"
             val isDark = when (themeMode) {
                 "dark_glass" -> true
-                "light_glass" -> false
+                "light_glass", "paper" -> false
                 else -> isSystemDark
             }
 
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
             GlassroomTheme(
                 darkTheme = isDark,
+                paperTheme = isPaper,
                 glassIntensity = glassIntensity
             ) {
                 Surface(

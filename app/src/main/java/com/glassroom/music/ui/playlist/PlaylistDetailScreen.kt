@@ -111,17 +111,12 @@ fun PlaylistDetailScreen(
                             modifier = Modifier
                                 .size(180.dp)
                                 .shadow(
-                                    elevation = 16.dp,
+                                    elevation = if (glassConfig.isPaper) 10.dp else 16.dp,
                                     shape = RoundedCornerShape(26.dp),
-                                    ambientColor = if (glassConfig.isDark) Color(0x40000000) else Color(0x240F172A)
+                                    ambientColor = glassConfig.shadowAmbient
                                 )
                                 .clip(RoundedCornerShape(26.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        if (glassConfig.isDark) listOf(Color(0xFF222B3D), Color(0xFF161F2E))
-                                        else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                                    )
-                                )
+                                .background(glassConfig.placeholderBrush)
                                 .border(
                                     width = 1.dp,
                                     brush = glassConfig.borderBrush,
@@ -143,7 +138,7 @@ fun PlaylistDetailScreen(
                                 Icon(
                                     imageVector = Icons.Filled.MusicNote,
                                     contentDescription = null,
-                                    tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    tint = glassConfig.textSecondary,
                                     modifier = Modifier.size(54.dp)
                                 )
                             }

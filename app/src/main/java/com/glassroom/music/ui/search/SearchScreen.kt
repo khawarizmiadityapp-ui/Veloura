@@ -91,7 +91,7 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .size(72.dp)
-                            .shadow(6.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A))
+                            .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
                             .clip(CircleShape)
                             .background(brush = glassConfig.cardBrush)
                             .border(1.dp, glassConfig.borderBrush, CircleShape),
@@ -130,7 +130,7 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .size(72.dp)
-                            .shadow(6.dp, CircleShape, ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A))
+                            .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
                             .clip(CircleShape)
                             .background(brush = glassConfig.cardBrush)
                             .border(1.dp, glassConfig.borderBrush, CircleShape),

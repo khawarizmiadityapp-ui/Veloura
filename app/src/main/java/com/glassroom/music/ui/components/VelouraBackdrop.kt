@@ -13,14 +13,25 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.theme.ArtworkColors
 import com.glassroom.music.ui.theme.LocalGlassConfig
 import com.glassroom.music.ui.theme.rememberAnimatedArtworkColors
+import kotlin.random.Random
+
+private data class PaperGrainSpec(
+    val nx: Float,
+    val ny: Float,
+    val radius: Float,
+    val alpha: Float,
+    val isLightFleck: Boolean
+)
 
 @Composable
 fun VelouraBackdrop(
@@ -69,16 +80,38 @@ fun VelouraBackdrop(
         label = "full_player_bloom"
     )
 
-    val baseBackgroundBrush = if (glassConfig.isDark) {
-        Brush.verticalGradient(
+    val paperGrains = remember {
+        val rng = Random(20261116)
+        List(160) {
+            PaperGrainSpec(
+                nx = rng.nextFloat(),
+                ny = rng.nextFloat(),
+                radius = 0.7f + rng.nextFloat() * 1.4f,
+                alpha = 0.025f + rng.nextFloat() * 0.045f,
+                isLightFleck = rng.nextBoolean()
+            )
+        }
+    }
+
+    val baseBackgroundBrush = when {
+        glassConfig.isPaper -> {
+            val warmth = glassConfig.intensity.coerceIn(0.2f, 1.0f)
+            Brush.verticalGradient(
+                colors = listOf(
+                    lerp(Color(0xFFFCF9F2), Color(0xFFF8F2E4), warmth),
+                    lerp(Color(0xFFF6EFE2), Color(0xFFEFE4D0), warmth),
+                    lerp(Color(0xFFEDE3D1), Color(0xFFE3D5BC), warmth)
+                )
+            )
+        }
+        glassConfig.isDark -> Brush.verticalGradient(
             colors = listOf(
                 Color(0xFF07090E),
                 Color(0xFF0B0F17),
                 Color(0xFF05070A)
             )
         )
-    } else {
-        Brush.verticalGradient(
+        else -> Brush.verticalGradient(
             colors = listOf(
                 Color(0xFFF9FAFD),
                 Color(0xFFF1F5F9),
@@ -100,7 +133,68 @@ fun VelouraBackdrop(
             val secondary = artworkColors.secondary
             val tertiary = artworkColors.tertiary
 
-            if (glassConfig.isDark) {
+            if (glassConfig.isPaper) {
+                val textureWeight = glassConfig.intensity.coerceIn(0.25f, 1.0f)
+
+                // Soft pastel watercolor washes inspired by artwork (gentle on eyes)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            primary.copy(alpha = 0.08f + 0.06f * playerBloomTransition),
+                            secondary.copy(alpha = 0.04f),
+                            Color.Transparent
+                        ),
+                        center = Offset(width * 0.82f, height * (0.16f + 0.14f * playerBloomTransition)),
+                        radius = width * (0.78f + 0.18f * playerBloomTransition)
+                    )
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            secondary.copy(alpha = 0.07f),
+                            Color.Transparent
+                        ),
+                        center = Offset(width * 0.14f, height * 0.56f),
+                        radius = width * 0.70f
+                    )
+                )
+                if (playerBloomTransition > 0.01f) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                primary.copy(alpha = 0.11f * playerBloomTransition),
+                                Color.Transparent
+                            ),
+                            center = Offset(width * 0.5f, height * 0.42f),
+                            radius = width * 0.84f
+                        )
+                    )
+                }
+
+                // Subtle cotton paper horizontal press weave hairlines
+                val fiberLineColor = Color(0xFF6B5A45).copy(alpha = 0.025f * textureWeight)
+                val stepY = 26f
+                var y = 12f
+                while (y < height) {
+                    drawLine(
+                        color = fiberLineColor,
+                        start = Offset(0f, y),
+                        end = Offset(width, y),
+                        strokeWidth = 0.6f
+                    )
+                    y += stepY
+                }
+
+                // Fine cellulose & mineral paper grain flecks
+                for (grain in paperGrains) {
+                    val baseColor = if (grain.isLightFleck) Color(0xFFFFFDF8) else Color(0xFF5C4B37)
+                    drawCircle(
+                        color = baseColor.copy(alpha = (grain.alpha * (0.65f + 0.6f * textureWeight)).coerceAtMost(0.08f)),
+                        radius = grain.radius,
+                        center = Offset(grain.nx * width, grain.ny * height)
+                    )
+                }
+            } else if (glassConfig.isDark) {
                 // Orb 1: Dynamic Track Accent Aurora (Top-Right)
                 val orb1Alpha = (0.40f + 0.15f * playerBloomTransition).coerceIn(0f, 1f)
                 drawCircle(

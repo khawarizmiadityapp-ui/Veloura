@@ -71,18 +71,13 @@ fun GlassPlaylistCard(
             modifier = Modifier
                 .size(size)
                 .shadow(
-                    elevation = 8.dp,
+                    elevation = if (glassConfig.isPaper) 4.dp else 8.dp,
                     shape = RoundedCornerShape(22.dp),
-                    ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x1A0F172A),
-                    spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x100F172A)
+                    ambientColor = glassConfig.shadowAmbient,
+                    spotColor = glassConfig.shadowSpot
                 )
                 .clip(RoundedCornerShape(22.dp))
-                .background(
-                    Brush.linearGradient(
-                        if (glassConfig.isDark) listOf(Color(0xFF222B3D), Color(0xFF161F2E))
-                        else listOf(Color(0xFFEDE9FE), Color(0xFFE2E8F0))
-                    )
-                )
+                .background(glassConfig.placeholderBrush)
                 .border(
                     width = 1.dp,
                     brush = glassConfig.borderBrush,
@@ -105,18 +100,13 @@ fun GlassPlaylistCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                if (glassConfig.isDark) listOf(Color(0xFF26324A), Color(0xFF161F30))
-                                else listOf(Color(0xFFE0E7FF), Color(0xFFF1F5F9))
-                            )
-                        ),
+                        .background(glassConfig.placeholderBrush),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MusicNote,
                         contentDescription = null,
-                        tint = if (glassConfig.isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                        tint = glassConfig.textSecondary,
                         modifier = Modifier.size(38.dp)
                     )
                 }

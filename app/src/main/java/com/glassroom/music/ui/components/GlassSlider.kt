@@ -63,8 +63,8 @@ fun GlassSlider(
         return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
     }
 
-    val activeColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
-    val inactiveColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x240F172A)
+    val activeColor = glassConfig.accentPrimary
+    val inactiveColor = glassConfig.inactiveTrackColor
 
     val thumbScale by animateFloatAsState(
         targetValue = if (isDragging) 1.25f else 1.0f,
@@ -103,8 +103,8 @@ fun GlassSlider(
                         .shadow(
                             elevation = if (isDragging) 8.dp else 4.dp,
                             shape = CircleShape,
-                            ambientColor = if (glassConfig.isDark) Color(0x8038BDF8) else Color(0x4D000000),
-                            spotColor = if (glassConfig.isDark) Color(0x9938BDF8) else Color(0x400284C7)
+                            ambientColor = glassConfig.shadowAmbient,
+                            spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else if (glassConfig.isDark) Color(0x9938BDF8) else Color(0x400284C7)
                         )
                         .clip(CircleShape)
                         .background(activeColor)

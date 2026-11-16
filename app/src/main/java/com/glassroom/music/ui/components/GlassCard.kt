@@ -64,10 +64,10 @@ fun GlassCard(
         modifier = modifier
             .scale(scale)
             .shadow(
-                elevation = elevation,
+                elevation = if (glassConfig.isPaper) (elevation * 0.6f) else elevation,
                 shape = shape,
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x120F172A),
-                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0A0F172A)
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = glassConfig.shadowSpot
             )
             .clip(shape)
             .background(brush = effectiveBrush, shape = shape)

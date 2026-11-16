@@ -129,20 +129,15 @@ fun GlassPlayerControl(
                 onClick = onToggleShuffle,
                 size = 46.dp,
                 iconSize = 22.dp,
-                tint = if (isShuffle) GlassAccentMint else glassConfig.textTertiary,
-                backgroundBrush = if (isShuffle) {
-                    Brush.verticalGradient(
-                        if (glassConfig.isDark) listOf(Color(0x3310B981), Color(0x1F06B6D4))
-                        else listOf(Color(0xFFD1FAE5), Color(0xFFA7F3D0))
-                    )
-                } else glassConfig.cardBrush
+                tint = if (isShuffle) glassConfig.accentSecondary else glassConfig.textTertiary,
+                backgroundBrush = if (isShuffle) glassConfig.toggleActiveBrush else glassConfig.cardBrush
             )
             Spacer(modifier = Modifier.height(3.dp))
             Box(
                 modifier = Modifier
                     .size(4.dp)
                     .clip(CircleShape)
-                    .background(if (isShuffle) GlassAccentMint else Color.Transparent)
+                    .background(if (isShuffle) glassConfig.accentSecondary else Color.Transparent)
             )
         }
 
@@ -170,11 +165,23 @@ fun GlassPlayerControl(
                         .clip(CircleShape)
                         .background(
                             brush = Brush.radialGradient(
-                                colors = listOf(
-                                    if (glassConfig.isDark) Color(0x6606B6D4) else Color(0x4D38BDF8),
-                                    if (glassConfig.isDark) Color(0x338B5CF6) else Color(0x26818CF8),
-                                    Color.Transparent
-                                )
+                                colors = when {
+                                    glassConfig.isPaper -> listOf(
+                                        Color(0x30B45309),
+                                        Color(0x1A2E6F4E),
+                                        Color.Transparent
+                                    )
+                                    glassConfig.isDark -> listOf(
+                                        Color(0x6606B6D4),
+                                        Color(0x338B5CF6),
+                                        Color.Transparent
+                                    )
+                                    else -> listOf(
+                                        Color(0x4D38BDF8),
+                                        Color(0x26818CF8),
+                                        Color.Transparent
+                                    )
+                                }
                             ),
                             alpha = pulseAlpha
                         )
@@ -187,22 +194,18 @@ fun GlassPlayerControl(
                     .scale(playScale)
                     .size(74.dp)
                     .shadow(
-                        elevation = 16.dp,
+                        elevation = if (glassConfig.isPaper) 10.dp else 16.dp,
                         shape = CircleShape,
-                        ambientColor = if (glassConfig.isDark) Color(0x6606B6D4) else Color(0x330F172A),
-                        spotColor = if (glassConfig.isDark) Color(0x4D8B5CF6) else Color(0x2638BDF8)
+                        ambientColor = if (glassConfig.isPaper) glassConfig.shadowAmbient else if (glassConfig.isDark) Color(0x6606B6D4) else Color(0x330F172A),
+                        spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else if (glassConfig.isDark) Color(0x4D8B5CF6) else Color(0x2638BDF8)
                     )
                     .clip(CircleShape)
                     .background(
-                        brush = Brush.verticalGradient(
-                            colors = if (glassConfig.isDark) listOf(
-                                Color(0xFF1E293B),
-                                Color(0xFF0F172A)
-                            ) else listOf(
-                                Color(0xFF1E293B),
-                                Color(0xFF334155)
-                            )
-                        )
+                        brush = when {
+                            glassConfig.isPaper -> Brush.verticalGradient(listOf(Color(0xFF2E251D), Color(0xFF1C1712)))
+                            glassConfig.isDark -> Brush.verticalGradient(listOf(Color(0xFF1E293B), Color(0xFF0F172A)))
+                            else -> Brush.verticalGradient(listOf(Color(0xFF1E293B), Color(0xFF334155)))
+                        }
                     )
                     .border(
                         width = 2.dp,
@@ -279,20 +282,15 @@ fun GlassPlayerControl(
                 onClick = onToggleRepeat,
                 size = 46.dp,
                 iconSize = 22.dp,
-                tint = if (isRepeatActive) GlassAccentMint else glassConfig.textTertiary,
-                backgroundBrush = if (isRepeatActive) {
-                    Brush.verticalGradient(
-                        if (glassConfig.isDark) listOf(Color(0x3310B981), Color(0x1F06B6D4))
-                        else listOf(Color(0xFFD1FAE5), Color(0xFFA7F3D0))
-                    )
-                } else glassConfig.cardBrush
+                tint = if (isRepeatActive) glassConfig.accentSecondary else glassConfig.textTertiary,
+                backgroundBrush = if (isRepeatActive) glassConfig.toggleActiveBrush else glassConfig.cardBrush
             )
             Spacer(modifier = Modifier.height(3.dp))
             Box(
                 modifier = Modifier
                     .size(4.dp)
                     .clip(CircleShape)
-                    .background(if (isRepeatActive) GlassAccentMint else Color.Transparent)
+                    .background(if (isRepeatActive) glassConfig.accentSecondary else Color.Transparent)
             )
         }
     }

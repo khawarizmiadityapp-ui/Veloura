@@ -42,33 +42,28 @@ fun GlassButton(
     val glassConfig = LocalGlassConfig.current
 
     val bgBrush = if (isPrimary) {
-        if (glassConfig.isDark) {
-            Brush.horizontalGradient(
-                colors = listOf(
-                    GlassAccentCobalt,
-                    Color(0xFF2563EB)
-                )
-            )
-        } else {
-            Brush.horizontalGradient(
-                colors = listOf(
-                    Color(0xFF1E293B),
-                    Color(0xFF0F172A)
-                )
-            )
-        }
+        glassConfig.primaryButtonBrush
     } else {
         glassConfig.cardBrush
     }
 
     val contentColor = if (isPrimary) Color.White else glassConfig.textPrimary
     val borderBrush = if (isPrimary) {
-        Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = 0.5f),
-                Color.White.copy(alpha = 0.15f)
+        if (glassConfig.isPaper) {
+            Brush.verticalGradient(
+                listOf(
+                    Color(0x40FFFFFF),
+                    Color(0x33000000)
+                )
             )
-        )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.5f),
+                    Color.White.copy(alpha = 0.15f)
+                )
+            )
+        }
     } else {
         glassConfig.borderBrush
     }
@@ -77,10 +72,10 @@ fun GlassButton(
         modifier = modifier
             .scale(scale)
             .shadow(
-                elevation = if (isPrimary) 8.dp else 4.dp,
+                elevation = if (glassConfig.isPaper) (if (isPrimary) 4.dp else 2.dp) else (if (isPrimary) 8.dp else 4.dp),
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = if (glassConfig.isDark) Color(0x33000000) else Color(0x140F172A),
-                spotColor = if (glassConfig.isDark) Color(0x26000000) else Color(0x0F0F172A)
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = glassConfig.shadowSpot
             )
             .clip(RoundedCornerShape(20.dp))
             .background(brush = bgBrush)
@@ -145,10 +140,10 @@ fun GlassIconButton(
             .scale(scale)
             .size(size)
             .shadow(
-                elevation = 8.dp,
+                elevation = if (glassConfig.isPaper) 4.dp else 8.dp,
                 shape = CircleShape,
-                ambientColor = if (glassConfig.isDark) Color(0x66000000) else Color(0x1F0F172A),
-                spotColor = if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x2638BDF8)
+                ambientColor = glassConfig.shadowAmbient,
+                spotColor = if (glassConfig.isPaper) glassConfig.shadowSpot else if (glassConfig.isDark) Color(0x4D06B6D4) else Color(0x2638BDF8)
             )
             .clip(CircleShape)
             .background(brush = effectiveBg)

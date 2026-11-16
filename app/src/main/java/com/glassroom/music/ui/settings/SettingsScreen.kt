@@ -73,44 +73,75 @@ fun SettingsScreen(
                             color = glassConfig.textPrimary
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GlassChip(
-                                text = "Light Glass",
-                                isSelected = themeMode == "light_glass",
-                                onClick = {
-                                    coroutineScope.launch {
-                                        preferencesManager.setThemeMode("light_glass")
-                                    }
-                                }
-                            )
-                            GlassChip(
-                                text = "Auto",
-                                isSelected = themeMode == "auto",
-                                onClick = {
-                                    coroutineScope.launch {
-                                        preferencesManager.setThemeMode("auto")
-                                    }
-                                }
-                            )
-                            GlassChip(
-                                text = "Dark Glass",
-                                isSelected = themeMode == "dark_glass",
-                                onClick = {
-                                    coroutineScope.launch {
-                                        preferencesManager.setThemeMode("dark_glass")
-                                    }
-                                }
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlassChip(
+                                    text = "Light Glass",
+                                    isSelected = themeMode == "light_glass",
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            preferencesManager.setThemeMode("light_glass")
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                GlassChip(
+                                    text = "Dark Glass",
+                                    isSelected = themeMode == "dark_glass",
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            preferencesManager.setThemeMode("dark_glass")
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlassChip(
+                                    text = "Paper (Kertas)",
+                                    isSelected = themeMode == "paper",
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            preferencesManager.setThemeMode("paper")
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                GlassChip(
+                                    text = "Auto",
+                                    isSelected = themeMode == "auto",
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            preferencesManager.setThemeMode("auto")
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Glassroom Intensity Feature (Seberapa Kaca / Transparan)
+                        // Adaptive Surface Tuning: Glass Translucency or Paper Texture & Warmth
                         val intensityPercent = (glassIntensity * 100).toInt()
-                        val intensityLabel = when {
-                            glassIntensity < 0.45f -> "Ultra Crystal (Bening)"
-                            glassIntensity < 0.82f -> "Frosted Glass (Buram Elegan)"
-                            else -> "Milky Glass (Pekat)"
+                        val intensityLabel = if (glassConfig.isPaper) {
+                            when {
+                                glassIntensity < 0.45f -> "Crisp Ivory (Putih Gading)"
+                                glassIntensity < 0.82f -> "Natural Cotton (Serat Halus)"
+                                else -> "Aged Parchment (Hangat)"
+                            }
+                        } else {
+                            when {
+                                glassIntensity < 0.45f -> "Ultra Crystal (Bening)"
+                                glassIntensity < 0.82f -> "Frosted Glass (Buram Elegan)"
+                                else -> "Milky Glass (Pekat)"
+                            }
                         }
 
                         Row(
@@ -119,14 +150,14 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Glassroom Translucency",
+                                text = if (glassConfig.isPaper) "Paper Warmth & Grain" else "Glassroom Translucency",
                                 style = GlassTypography.titleMedium,
                                 color = glassConfig.textPrimary
                             )
                             Text(
                                 text = "$intensityPercent% • $intensityLabel",
                                 style = GlassTypography.labelSmall,
-                                color = GlassAccentCobalt,
+                                color = glassConfig.accentPrimary,
                                 fontSize = 11.sp
                             )
                         }
@@ -142,9 +173,9 @@ fun SettingsScreen(
                             },
                             valueRange = 0.25f..0.95f,
                             colors = androidx.compose.material3.SliderDefaults.colors(
-                                thumbColor = if (glassConfig.isDark) Color.White else Color(0xFF1E293B),
-                                activeTrackColor = if (glassConfig.isDark) Color(0xFF38BDF8) else Color(0xFF1E293B),
-                                inactiveTrackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x260F172A)
+                                thumbColor = if (glassConfig.isDark) Color.White else glassConfig.accentPrimary,
+                                activeTrackColor = glassConfig.accentPrimary,
+                                inactiveTrackColor = glassConfig.inactiveTrackColor
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -154,7 +185,7 @@ fun SettingsScreen(
                         // Quick Presets
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             GlassChip(
-                                text = "💎 Crystal (35%)",
+                                text = if (glassConfig.isPaper) "Ivory (35%)" else "💎 Crystal (35%)",
                                 isSelected = (glassIntensity - 0.35f).let { kotlin.math.abs(it) < 0.05f },
                                 onClick = {
                                     coroutineScope.launch {
@@ -163,7 +194,7 @@ fun SettingsScreen(
                                 }
                             )
                             GlassChip(
-                                text = "❄️ Frosted (75%)",
+                                text = if (glassConfig.isPaper) "Cotton (75%)" else "❄️ Frosted (75%)",
                                 isSelected = (glassIntensity - 0.75f).let { kotlin.math.abs(it) < 0.05f },
                                 onClick = {
                                     coroutineScope.launch {
@@ -172,7 +203,7 @@ fun SettingsScreen(
                                 }
                             )
                             GlassChip(
-                                text = "🥛 Milky (95%)",
+                                text = if (glassConfig.isPaper) "Vintage (95%)" else "🥛 Milky (95%)",
                                 isSelected = (glassIntensity - 0.95f).let { kotlin.math.abs(it) < 0.05f },
                                 onClick = {
                                     coroutineScope.launch {
@@ -186,7 +217,7 @@ fun SettingsScreen(
 
                         // Live Mini Preview inside card
                         Text(
-                            text = "Live Glassroom Preview:",
+                            text = if (glassConfig.isPaper) "Live Paper Preview:" else "Live Glassroom Preview:",
                             style = GlassTypography.labelSmall,
                             color = glassConfig.textTertiary
                         )
@@ -200,7 +231,11 @@ fun SettingsScreen(
                                 .padding(12.dp)
                         ) {
                             Text(
-                                text = "Kaca Glassroom: Transparan, halus, & berkedalaman optik",
+                                text = if (glassConfig.isPaper) {
+                                    "Kertas Veloura: Hangat, matte, bertekstur serat & tinta tajam"
+                                } else {
+                                    "Kaca Glassroom: Transparan, halus, & berkedalaman optik"
+                                },
                                 style = GlassTypography.bodyMedium,
                                 color = glassConfig.textPrimary
                             )
@@ -259,7 +294,7 @@ fun SettingsScreen(
                                 NetworkClient.VERCEL_SERVER_URL -> "☁️ Cloud (Vercel)"
                                 else -> "💻 Custom / Local"
                             }
-                            val badgeColor = if (backendUrl == NetworkClient.SENTINEL_SERVER_URL) GlassAccentMint else GlassAccentCobalt
+                            val badgeColor = if (backendUrl == NetworkClient.SENTINEL_SERVER_URL) glassConfig.accentSecondary else glassConfig.accentPrimary
                             Text(
                                 text = badgeText,
                                 style = GlassTypography.labelSmall,
@@ -343,7 +378,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Input Field
-                        val inputBg = if (glassConfig.isDark) Color(0x331E293B) else Color(0x66FFFFFF)
+                        val inputBg = glassConfig.inputSurfaceColor
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -428,7 +463,7 @@ fun SettingsScreen(
                             Text(
                                 text = "Reset ke Server Utama (veloura.sentinelofc.web.id)",
                                 style = GlassTypography.labelSmall,
-                                color = GlassAccentCobalt,
+                                color = glassConfig.accentPrimary,
                                 modifier = Modifier
                                     .clickable {
                                         coroutineScope.launch {
@@ -504,11 +539,11 @@ fun SettingsScreen(
                                 letterSpacing = 1.5.sp,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                             ),
-                            color = GlassAccentCobalt
+                            color = glassConfig.accentPrimary
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Version 1.0.0 • Pure Glass Edition",
+                            text = if (glassConfig.isPaper) "Version 1.0.0 • Paper Edition" else "Version 1.0.0 • Pure Glass Edition",
                             style = GlassTypography.labelSmall,
                             color = glassConfig.textTertiary
                         )
@@ -563,9 +598,9 @@ private fun SettingToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = if (glassConfig.isDark) GlassAccentCobalt else Color(0xFF1E293B),
-                uncheckedThumbColor = if (glassConfig.isDark) Color(0xFF64748B) else Color(0xFF94A3B8),
-                uncheckedTrackColor = if (glassConfig.isDark) Color(0x33FFFFFF) else Color(0x260F172A)
+                checkedTrackColor = if (glassConfig.isDark || glassConfig.isPaper) glassConfig.accentPrimary else Color(0xFF1E293B),
+                uncheckedThumbColor = if (glassConfig.isDark) Color(0xFF64748B) else glassConfig.textTertiary,
+                uncheckedTrackColor = glassConfig.inactiveTrackColor
             )
         )
     }

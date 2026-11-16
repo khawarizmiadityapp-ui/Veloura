@@ -30,14 +30,18 @@ fun rememberGlassShimmerBrush(): Brush {
         label = "shimmer_anim"
     )
 
-    val colors = if (glassConfig.isDark) {
-        listOf(
+    val colors = when {
+        glassConfig.isPaper -> listOf(
+            Color(0xFFEAE0CE),
+            Color(0xFFFBF6EC),
+            Color(0xFFEAE0CE)
+        )
+        glassConfig.isDark -> listOf(
             Color(0x0FFFFFFF),
             Color(0x28FFFFFF),
             Color(0x0FFFFFFF)
         )
-    } else {
-        listOf(
+        else -> listOf(
             Color(0x33FFFFFF),
             Color(0x80FFFFFF),
             Color(0x33FFFFFF)
@@ -79,7 +83,7 @@ fun GlassSongSkeleton(
 ) {
     val glassConfig = LocalGlassConfig.current
     val brush = rememberGlassShimmerBrush()
-    val bg = if (glassConfig.isDark) Color(0x1F1E293B) else Color(0x66FFFFFF)
+    val bg = glassConfig.inputSurfaceColor
 
     Row(
         modifier = modifier

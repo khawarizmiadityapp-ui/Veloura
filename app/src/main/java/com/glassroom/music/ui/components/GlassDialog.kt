@@ -45,30 +45,16 @@ fun GlassDialog(
             .padding(horizontal = 24.dp)
     ) {
         val glassConfig = com.glassroom.music.ui.theme.LocalGlassConfig.current
-        val dialogBrush = if (glassConfig.isDark) {
-            Brush.verticalGradient(
-                listOf(
-                    Color(0xF018202F),
-                    Color(0xFA0F1420)
-                )
-            )
-        } else {
-            Brush.verticalGradient(
-                listOf(
-                    Color(0xF8FFFFFF),
-                    Color(0xEEF1F5F9)
-                )
-            )
-        }
+        val dialogBrush = glassConfig.dialogBrush
 
         Box(
             modifier = modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = 24.dp,
+                    elevation = if (glassConfig.isPaper) 14.dp else 24.dp,
                     shape = RoundedCornerShape(32.dp),
-                    ambientColor = if (glassConfig.isDark) Color(0x66000000) else Color(0x330F172A),
-                    spotColor = if (glassConfig.isDark) Color(0x4D000000) else Color(0x260F172A)
+                    ambientColor = glassConfig.shadowAmbient,
+                    spotColor = glassConfig.shadowSpot
                 )
                 .clip(RoundedCornerShape(32.dp))
                 .background(brush = dialogBrush)
