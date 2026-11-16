@@ -1003,6 +1003,23 @@ class MusicRepositoryImpl(
 
         if (parsedTracks.isEmpty()) return null
 
+        // Spotify Embed caps trackList at 100 items; paginate remaining items via Pathfinder using embed's session token.
+        val sessionToken = getSafeObj(root, "props")
+            ?.let { getSafeObj(it, "pageProps") }
+            ?.let { getSafeObj(it, "state") }
+            ?.let { getSafeObj(it, "settings") }
+            ?.let { getSafeObj(it, "session") }
+            ?.let { getSafeString(it, "accessToken") }
+
+        if (entityType == "playlist" && !sessionToken.isNullOrBlank() && parsedTracks.size >= 50) {
+            fetchAdditionalSpotifyPlaylistTracks(
+                playlistId = entityId,
+                accessToken = sessionToken,
+                startOffset = parsedTracks.size,
+                outTracks = parsedTracks
+            )
+        }
+
         return SpotifyEmbedPayload(
             id = entityId,
             title = title,
@@ -1010,6 +1027,125 @@ class MusicRepositoryImpl(
             artwork = coverArtUrl,
             tracks = parsedTracks
         )
+    }
+
+    private fun fetchAdditionalSpotifyPlaylistTracks(
+        playlistId: String,
+        accessToken: String,
+        startOffset: Int,
+        outTracks: MutableList<SpotifyTrackMetadata>
+    ) {
+        val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+        val pathfinderUrl = "https://api-partner.spotify.com/pathfinder/v2/query"
+        val persistedHash = "9c53fb83f35c6a177be88bf1b67cb080b853e86b576ed174216faa8f9164fc8f"
+        val pageSize = 100
+
+        var offset = startOffset
+        var totalCount = Int.MAX_VALUE
+        var pageGuard = 0
+
+        while (offset < totalCount && pageGuard++ < 100) {
+            val payload = mapOf(
+                "variables" to mapOf(
+                    "uri" to "spotify:playlist:$playlistId",
+                    "offset" to offset,
+                    "limit" to pageSize,
+                    "enableWatchFeedEntrypoint" to false
+                ),
+                "operationName" to "fetchPlaylistContents",
+                "extensions" to mapOf(
+                    "persistedQuery" to mapOf(
+                        "version" to 1,
+                        "sha256Hash" to persistedHash
+                    )
+                )
+            )
+
+            val body = Gson().toJson(payload).toRequestBody(jsonMediaType)
+            val request = Request.Builder()
+                .url(pathfinderUrl)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
+                .post(body)
+                .build()
+
+            val responseJson = try {
+                onDeviceHttpClient.newCall(request).execute().use { resp ->
+                    val raw = resp.body?.string()
+                    if (!resp.isSuccessful || raw.isNullOrBlank()) null
+                    else Gson().fromJson(raw, JsonObject::class.java)
+                }
+            } catch (_: Exception) {
+                null
+            } ?: break
+
+            val content = getSafeObj(responseJson, "data")
+                ?.let { getSafeObj(it, "playlistV2") }
+                ?.let { getSafeObj(it, "content") }
+                ?: break
+
+            val reportedTotal = getSafeInt(content, "totalCount")
+            if (reportedTotal != null && reportedTotal > 0) {
+                totalCount = reportedTotal
+            }
+
+            val items = getSafeArray(content, "items") ?: break
+            if (items.size() == 0) break
+
+            for (element in items) {
+                if (!element.isJsonObject) continue
+                val elemObj = element.asJsonObject
+                val itemData = getSafeObj(elemObj, "itemV2")?.let { getSafeObj(it, "data") } ?: continue
+                val tTitle = getSafeString(itemData, "name")?.replace('\u00A0', ' ')?.trim().orEmpty()
+                if (tTitle.isBlank()) continue
+
+                val artistsArray = getSafeObj(itemData, "artists")?.let { getSafeArray(it, "items") }
+                val artistNames = mutableListOf<String>()
+                if (artistsArray != null) {
+                    for (artistEl in artistsArray) {
+                        if (!artistEl.isJsonObject) continue
+                        val artistName = getSafeObj(artistEl.asJsonObject, "profile")
+                            ?.let { getSafeString(it, "name") }
+                            ?.replace('\u00A0', ' ')
+                            ?.trim()
+                        if (!artistName.isNullOrBlank()) {
+                            artistNames.add(artistName)
+                        }
+                    }
+                }
+                val tArtist = if (artistNames.isNotEmpty()) {
+                    artistNames.joinToString(", ")
+                } else {
+                    (getSafeString(itemData, "artistName")
+                        ?: getSafeObj(itemData, "podcastV2")
+                            ?.let { getSafeObj(it, "data") }
+                            ?.let { getSafeString(it, "name") }
+                        ?: "")
+                        .replace('\u00A0', ' ')
+                        .trim()
+                }
+
+                val durationMs = getSafeObj(itemData, "trackDuration")?.let { getSafeLong(it, "totalMilliseconds") }
+                    ?: getSafeObj(itemData, "duration")?.let { getSafeLong(it, "totalMilliseconds") }
+                    ?: 0L
+                val durationSec = (durationMs / 1000L).toInt().coerceAtLeast(0)
+                val uri = getSafeString(itemData, "uri").orEmpty()
+                val spotifyId = uri.substringAfterLast(":").trim()
+
+                outTracks.add(
+                    SpotifyTrackMetadata(
+                        title = tTitle,
+                        artist = tArtist,
+                        durationSec = durationSec,
+                        spotifyTrackId = spotifyId
+                    )
+                )
+            }
+
+            offset += items.size()
+            if (items.size() < pageSize && reportedTotal == null) break
+        }
     }
 
     override fun importSpotifyPlaylist(urlOrId: String): Flow<SpotifyImportState> = flow {
@@ -1049,7 +1185,7 @@ class MusicRepositoryImpl(
             val orderedTracks = arrayOfNulls<Track>(totalCount)
             val completedItems = mutableListOf<TrackImportItem>()
             var matchedCount = 0
-            val semaphore = Semaphore(6)
+            val semaphore = Semaphore(8)
             val progressChannel = Channel<Triple<Int, TrackImportItem, Track>>(Channel.UNLIMITED)
 
             coroutineScope {
@@ -1114,7 +1250,15 @@ class MusicRepositoryImpl(
                 producerJob.join()
             }
 
-            val finalTracks = orderedTracks.filterNotNull()
+            val rawOrdered = orderedTracks.filterNotNull()
+            val seenTrackIds = HashSet<String>(rawOrdered.size)
+            val finalTracks = rawOrdered.mapIndexed { idx, track ->
+                if (seenTrackIds.add(track.id)) {
+                    track
+                } else {
+                    track.copy(id = "sp_dup_${idx}_${track.id}")
+                }
+            }
             val playlist = Playlist(
                 id = onDeviceEmbed.id,
                 name = onDeviceEmbed.title,

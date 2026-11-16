@@ -1055,6 +1055,79 @@ def scrape_spotify_playlist(playlist_url_or_id):
                 "duration": t_duration
             })
 
+        # Paginate remaining items beyond Embed's 100-track cap using the embed session accessToken
+        session_token = (
+            data.get("props", {})
+            .get("pageProps", {})
+            .get("state", {})
+            .get("settings", {})
+            .get("session", {})
+            .get("accessToken")
+        )
+        if entity_type == "playlist" and session_token and len(tracks) >= 50:
+            offset = len(tracks)
+            total_count = float("inf")
+            page_guard = 0
+            while offset < total_count and page_guard < 100:
+                page_guard += 1
+                pf_payload = {
+                    "variables": {
+                        "uri": f"spotify:playlist:{entity_id}",
+                        "offset": offset,
+                        "limit": 100,
+                        "enableWatchFeedEntrypoint": False,
+                    },
+                    "operationName": "fetchPlaylistContents",
+                    "extensions": {
+                        "persistedQuery": {
+                            "version": 1,
+                            "sha256Hash": "9c53fb83f35c6a177be88bf1b67cb080b853e86b576ed174216faa8f9164fc8f",
+                        }
+                    },
+                }
+                pf_resp = requests.post(
+                    "https://api-partner.spotify.com/pathfinder/v2/query",
+                    json=pf_payload,
+                    headers={
+                        "Authorization": f"Bearer {session_token}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+                    },
+                    timeout=15,
+                )
+                if pf_resp.status_code != 200:
+                    break
+                content = pf_resp.json().get("data", {}).get("playlistV2", {}).get("content") or {}
+                reported_total = content.get("totalCount")
+                if isinstance(reported_total, int) and reported_total > 0:
+                    total_count = reported_total
+                batch = content.get("items") or []
+                if not batch:
+                    break
+                for pf_item in batch:
+                    td = ((pf_item.get("itemV2") or {}).get("data") or {}) if isinstance(pf_item, dict) else {}
+                    t_name = (td.get("name") or "").replace("\u00a0", " ").strip()
+                    if not t_name:
+                        continue
+                    artist_items = ((td.get("artists") or {}).get("items") or [])
+                    artists = [
+                        (a.get("profile") or {}).get("name", "").replace("\u00a0", " ").strip()
+                        for a in artist_items
+                        if isinstance(a, dict)
+                    ]
+                    t_artist = ", ".join(a for a in artists if a)
+                    ms = ((td.get("trackDuration") or {}).get("totalMilliseconds")) or ((td.get("duration") or {}).get("totalMilliseconds")) or 0
+                    t_duration = int(ms / 1000) if ms else 180
+                    tracks.append({
+                        "title": t_name,
+                        "artist": t_artist,
+                        "album": title,
+                        "duration": t_duration,
+                    })
+                offset += len(batch)
+                if len(batch) < 100 and not isinstance(reported_total, int):
+                    break
+
         if tracks:
             return {
                 "id": entity_id,
