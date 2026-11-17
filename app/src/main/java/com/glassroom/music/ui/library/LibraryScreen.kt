@@ -8,9 +8,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -20,9 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Playlist
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.*
@@ -43,19 +51,17 @@ fun LibraryScreen(
     var selectedArtist by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uiState.selectedTab) {
-        if (uiState.selectedTab != "Artists") {
+        if (uiState.selectedTab != "Artis") {
             selectedArtist = null
         }
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
+        modifier = modifier.fillMaxSize()
     ) {
         GlassTopBar(
-            title = "Library",
-            subtitle = "Your Saved Sounds"
+            title = "Koleksi",
+            subtitle = "Musik Tersimpanmu"
         )
 
         // Filter Tabs
@@ -75,11 +81,11 @@ fun LibraryScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         when (uiState.selectedTab) {
-            "Liked Songs" -> {
+            "Lagu Disukai" -> {
                 if (uiState.favoriteTracks.isEmpty()) {
                     EmptyLibraryState(
-                        title = "No favorite songs yet",
-                        subtitle = "Tap the heart icon on any song to save it here."
+                        title = "Belum ada lagu disukai",
+                        subtitle = "Ketuk ikon hati pada lagu mana saja untuk menyimpannya di sini."
                     )
                 } else {
                     TrackList(
@@ -93,11 +99,11 @@ fun LibraryScreen(
                 }
             }
 
-            "Recently Played" -> {
+            "Baru Diputar" -> {
                 if (uiState.recentlyPlayed.isEmpty()) {
                     EmptyLibraryState(
-                        title = "No listening history",
-                        subtitle = "Tracks you play will show up here."
+                        title = "Belum ada riwayat putar",
+                        subtitle = "Lagu yang baru kamu dengarkan akan muncul di sini."
                     )
                 } else {
                     TrackList(
@@ -129,7 +135,7 @@ fun LibraryScreen(
                 }
             }
 
-            "Artists" -> {
+            "Artis" -> {
                 val groupedByArtist = uiState.favoriteTracks
                     .filter { it.artist.isNotBlank() }
                     .groupBy { it.artist }
@@ -143,8 +149,8 @@ fun LibraryScreen(
 
                 if (groupedByArtist.isEmpty()) {
                     EmptyLibraryState(
-                        title = "No artists yet",
-                        subtitle = "Favorite songs from artists to organize them here."
+                        title = "Belum ada artis",
+                        subtitle = "Sukai beberapa lagu agar daftar artis terkelompok otomatis di sini."
                     )
                 } else if (selectedArtist != null && activeArtistTracks != null) {
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -159,7 +165,7 @@ fun LibraryScreen(
                                 onClick = { selectedArtist = null },
                                 size = 38.dp,
                                 iconSize = 18.dp,
-                                contentDescription = "Back to Artists"
+                                contentDescription = "Kembali ke Artis"
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -241,11 +247,11 @@ fun LibraryScreen(
                 }
             }
 
-            "Playlists" -> {
+            "Playlist" -> {
                 if (uiState.playlists.isEmpty()) {
                     EmptyLibraryState(
-                        title = "No playlists found",
-                        subtitle = "Create playlists or import from Spotify in the Playlists tab."
+                        title = "Belum ada playlist",
+                        subtitle = "Buat playlist atau impor dari Spotify lewat menu Playlist."
                     )
                 } else {
                     LazyColumn(
@@ -263,21 +269,79 @@ fun LibraryScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(14.dp)
+                                    modifier = Modifier.padding(12.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(glassConfig.placeholderBrush)
+                                            .border(0.8.dp, glassConfig.borderBrush, RoundedCornerShape(14.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (playlist.artwork.isNotBlank()) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(playlist.artwork)
+                                                    .crossfade(true)
+                                                    .memoryCacheKey(playlist.id.ifBlank { playlist.artwork })
+                                                    .build(),
+                                                contentDescription = playlist.name,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = glassConfig.textSecondary,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = playlist.name,
-                                            style = GlassTypography.titleMedium,
-                                            color = glassConfig.textPrimary
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = playlist.name,
+                                                style = GlassTypography.titleMedium,
+                                                color = glassConfig.textPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            if (playlist.isSpotifyImport) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(Color(0xCC10B981))
+                                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Spotify",
+                                                        style = GlassTypography.labelSmall,
+                                                        color = Color.White,
+                                                        fontSize = 9.sp
+                                                    )
+                                                }
+                                            }
+                                        }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "${playlist.trackCount} tracks",
+                                            text = "${playlist.trackCount} lagu",
                                             style = GlassTypography.labelSmall,
                                             color = glassConfig.textSecondary
                                         )
                                     }
+                                    Icon(
+                                        imageVector = Icons.Filled.ChevronRight,
+                                        contentDescription = null,
+                                        tint = glassConfig.textTertiary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -347,13 +411,15 @@ private fun EmptyLibraryState(title: String, subtitle: String) {
             Text(
                 text = title,
                 style = GlassTypography.headlineMedium,
-                color = glassConfig.textPrimary
+                color = glassConfig.textPrimary,
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = subtitle,
                 style = GlassTypography.bodyMedium,
-                color = glassConfig.textSecondary
+                color = glassConfig.textSecondary,
+                textAlign = TextAlign.Center
             )
         }
     }

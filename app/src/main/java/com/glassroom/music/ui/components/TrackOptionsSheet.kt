@@ -191,7 +191,7 @@ fun TrackOptionsSheet(
                         TrackOptionActionRow(
                             icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             title = if (isFavorite) "Hapus dari Favorit" else "Tambahkan ke Favorit",
-                            subtitle = if (isFavorite) "Hapus lagu ini dari Liked Songs" else "Simpan ke Liked Songs",
+                            subtitle = if (isFavorite) "Hapus lagu ini dari Lagu Disukai" else "Simpan ke Lagu Disukai",
                             iconTint = if (isFavorite) glassConfig.heartActive else glassConfig.textPrimary,
                             onClick = {
                                 onToggleFavorite()

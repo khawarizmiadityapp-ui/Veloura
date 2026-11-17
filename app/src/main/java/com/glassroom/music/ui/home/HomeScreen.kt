@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -114,9 +114,9 @@ fun HomeScreen(
                     }
 
                     GlassIconButton(
-                        icon = Icons.Outlined.GraphicEq,
+                        icon = Icons.Filled.Refresh,
                         onClick = { viewModel.loadRecommendations() },
-                        contentDescription = "Refresh Feed"
+                        contentDescription = "Segarkan Beranda"
                     )
                 }
             }
@@ -130,7 +130,7 @@ fun HomeScreen(
                     .padding(horizontal = 20.dp, vertical = 6.dp)
             ) {
                 GlassSearchBar(
-                    placeholder = "Search songs, artists, albums...",
+                    placeholder = "Cari lagu, artis, atau album...",
                     readOnly = true,
                     onClick = onNavigateToSearch
                 )
@@ -142,8 +142,8 @@ fun HomeScreen(
         if (uiState.recentlyPlayed.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Recently Played",
-                    subtitle = "Jump back in where you left off"
+                    title = "Baru Diputar",
+                    subtitle = "Lanjutkan lagu yang terakhir kamu dengar"
                 )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
@@ -174,8 +174,8 @@ fun HomeScreen(
         if (uiState.madeForYou.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Made For You",
-                    subtitle = "Curated based on your taste"
+                    title = "Untuk Kamu",
+                    subtitle = "Pilihan lagu sesuai seleramu"
                 )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
@@ -205,8 +205,8 @@ fun HomeScreen(
         // Popular Songs Section
         item {
             SectionHeader(
-                title = "Popular Songs",
-                subtitle = "Top played in the room"
+                title = "Lagu Populer",
+                subtitle = "Paling sering diputar di Veloura"
             )
         }
         if (uiState.isLoading && uiState.popularSongs.isEmpty()) {
@@ -239,8 +239,8 @@ fun HomeScreen(
         if (uiState.userPlaylists.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Your Playlists",
-                    subtitle = "Personal playlists & mixes"
+                    title = "Playlist Kamu",
+                    subtitle = "Daftar putar & mix pribadi"
                 )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
@@ -265,8 +265,8 @@ fun HomeScreen(
         if (uiState.importedPlaylists.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Imported Playlists",
-                    subtitle = "Synced from your Spotify library"
+                    title = "Playlist Impor",
+                    subtitle = "Tersinkron dari koleksi Spotify"
                 )
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
@@ -291,8 +291,8 @@ fun HomeScreen(
         if (uiState.trending.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Recommended For You",
-                    subtitle = "Fresh sounds picked for this session"
+                    title = "Rekomendasi Untukmu",
+                    subtitle = "Lagu segar pilihan untuk sesi ini"
                 )
             }
             itemsIndexed(

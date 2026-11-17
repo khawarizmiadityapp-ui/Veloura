@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class LibraryUiState(
-    val selectedTab: String = "Liked Songs",
+    val selectedTab: String = "Lagu Disukai",
     val favoriteTracks: List<Track> = emptyList(),
     val recentlyPlayed: List<Track> = emptyList(),
     val offlineTracks: List<Track> = emptyList(),
@@ -25,7 +25,7 @@ class LibraryViewModel(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    val tabs = listOf("Liked Songs", "Recently Played", "Offline", "Artists", "Playlists")
+    val tabs = listOf("Lagu Disukai", "Baru Diputar", "Offline", "Artis", "Playlist")
 
     init {
         observeFavorites()

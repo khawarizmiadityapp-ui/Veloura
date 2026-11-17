@@ -90,7 +90,7 @@ fun QueueSheet(
             ) {
                 Column {
                     Text(
-                        text = "Play Queue",
+                        text = "Antrean Putar",
                         style = GlassTypography.headlineMedium,
                         color = glassConfig.textPrimary
                     )
@@ -124,7 +124,7 @@ fun QueueSheet(
             // Now Playing Section
             if (currentTrack != null) {
                 Text(
-                    text = "Now Playing",
+                    text = "Sedang Diputar",
                     style = GlassTypography.titleMedium,
                     color = glassConfig.textSecondary,
                     modifier = Modifier.padding(vertical = 8.dp)
@@ -146,7 +146,7 @@ fun QueueSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Up Next (${upcomingTracks.size})",
+                    text = "Berikutnya (${upcomingTracks.size})",
                     style = GlassTypography.titleMedium,
                     color = glassConfig.textSecondary
                 )

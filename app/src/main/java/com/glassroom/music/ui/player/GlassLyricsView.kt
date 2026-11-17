@@ -243,7 +243,7 @@ fun GlassLyricsView(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "LIVE KARAOKE SYNC",
+                                text = "KARAOKE LANGSUNG",
                                 style = GlassTypography.labelSmall,
                                 color = GlassAccentMint,
                                 fontSize = 10.sp,
@@ -434,7 +434,7 @@ fun GlassLyricsView(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "PLAIN LYRICS",
+                            text = "LIRIK TEKS",
                             style = GlassTypography.labelSmall,
                             color = glassConfig.accentPrimary,
                             fontSize = 10.sp,

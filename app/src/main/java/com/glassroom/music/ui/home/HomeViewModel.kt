@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 data class HomeUiState(
-    val greeting: String = "Good evening",
+    val greeting: String = "Selamat malam",
     val isLoading: Boolean = true,
     val popularSongs: List<Track> = emptyList(),
     val madeForYou: List<Track> = emptyList(),
@@ -63,10 +63,10 @@ class HomeViewModel(
     private fun updateGreeting() {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val greeting = when (hour) {
-            in 4..11 -> "Good morning"
-            in 12..16 -> "Good afternoon"
-            in 17..20 -> "Good evening"
-            else -> "Good night"
+            in 4..10 -> "Selamat pagi"
+            in 11..14 -> "Selamat siang"
+            in 15..18 -> "Selamat sore"
+            else -> "Selamat malam"
         }
         _uiState.update { it.copy(greeting = greeting) }
     }

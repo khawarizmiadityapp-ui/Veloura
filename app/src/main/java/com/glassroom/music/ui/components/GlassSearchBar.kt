@@ -75,7 +75,7 @@ fun GlassSearchBar(
     query: String = "",
     onQueryChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
-    placeholder: String = "Search songs, artists, albums...",
+    placeholder: String = "Cari lagu, artis, album...",
     readOnly: Boolean = false,
     onClick: (() -> Unit)? = null,
     onSearch: () -> Unit = {}

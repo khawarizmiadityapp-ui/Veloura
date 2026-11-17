@@ -137,7 +137,7 @@ fun PlaylistDetailScreen(
             GlassIconButton(
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                 onClick = onBack,
-                contentDescription = "Back"
+                contentDescription = "Kembali"
             )
             if (playlist != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -159,7 +159,7 @@ fun PlaylistDetailScreen(
                                     }
                                 }
                             },
-                            contentDescription = "Sync Spotify Playlist",
+                            contentDescription = "Sinkronkan Playlist Spotify",
                             tint = glassConfig.accentSecondary
                         )
                     }
@@ -171,7 +171,7 @@ fun PlaylistDetailScreen(
                     GlassIconButton(
                         icon = Icons.Filled.Delete,
                         onClick = { showDeleteConfirmDialog = true },
-                        contentDescription = "Delete Playlist",
+                        contentDescription = "Hapus Playlist",
                         tint = Color(0xFFEF4444)
                     )
                 }
@@ -181,7 +181,7 @@ fun PlaylistDetailScreen(
         if (playlist == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "Playlist not found",
+                    text = "Playlist tidak ditemukan",
                     style = GlassTypography.bodyLarge,
                     color = glassConfig.textSecondary
                 )
@@ -261,7 +261,7 @@ fun PlaylistDetailScreen(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "${tracks.size} songs",
+                                text = "${tracks.size} lagu",
                                 style = GlassTypography.labelSmall,
                                 color = glassConfig.textTertiary
                             )
@@ -275,7 +275,7 @@ fun PlaylistDetailScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "Spotify Import",
+                                        text = "Impor Spotify",
                                         style = GlassTypography.labelSmall,
                                         color = Color.White,
                                         fontSize = 9.sp
@@ -292,7 +292,7 @@ fun PlaylistDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             GlassButton(
-                                text = "Play All",
+                                text = "Putar Semua",
                                 icon = Icons.Filled.PlayArrow,
                                 isPrimary = true,
                                 onClick = {
@@ -301,7 +301,7 @@ fun PlaylistDetailScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             GlassButton(
-                                text = "Shuffle",
+                                text = "Acak",
                                 icon = Icons.Filled.Shuffle,
                                 isPrimary = false,
                                 onClick = {

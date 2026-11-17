@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 
 data class SearchUiState(
     val query: String = "",
-    val selectedCategory: String = "Songs",
+    val selectedCategory: String = "Lagu",
     val isLoading: Boolean = false,
     val results: List<Track> = emptyList(),
     val matchedPlaylists: List<Playlist> = emptyList(),
@@ -40,7 +40,7 @@ class SearchViewModel(
     @Volatile
     private var savedPlaylists: List<Playlist> = emptyList()
 
-    val categories = listOf("Songs", "Artists", "Albums", "Playlists")
+    val categories = listOf("Lagu", "Artis", "Album", "Playlist")
 
     init {
         viewModelScope.launch {
@@ -126,17 +126,26 @@ class SearchViewModel(
         }
     }
 
+    private fun toApiCategory(category: String): String {
+        return when (category) {
+            "Artis" -> "artists"
+            "Album" -> "albums"
+            "Playlist" -> "playlists"
+            else -> "songs"
+        }
+    }
+
     private fun buildCategoryQuery(rawQuery: String, category: String): String {
         val q = rawQuery.trim()
-        return when (category.lowercase()) {
-            "albums" -> if (q.contains("album", ignoreCase = true)) q else "$q full album"
-            "playlists" -> if (q.contains("playlist", ignoreCase = true) || q.contains("mix", ignoreCase = true)) q else "$q playlist mix"
+        return when (category) {
+            "Album" -> if (q.contains("album", ignoreCase = true)) q else "$q full album"
+            "Playlist" -> if (q.contains("playlist", ignoreCase = true) || q.contains("mix", ignoreCase = true)) q else "$q playlist mix"
             else -> q
         }
     }
 
     private fun filterTracksForCategory(tracks: List<Track>, category: String): List<Track> {
-        if (!category.equals("Songs", ignoreCase = true)) return tracks
+        if (category != "Lagu") return tracks
         val normalSongs = tracks.filter { it.duration <= 720 }
         return if (normalSongs.size >= 3) normalSongs else tracks
     }
@@ -146,7 +155,7 @@ class SearchViewModel(
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val queryToUse = buildCategoryQuery(query, category)
-            val result = musicRepository.search(queryToUse, category.lowercase())
+            val result = musicRepository.search(queryToUse, toApiCategory(category))
             if (result.isSuccess) {
                 val favIds = favoriteIds
                 val filtered = filterTracksForCategory(result.getOrNull() ?: emptyList(), category)
@@ -162,7 +171,7 @@ class SearchViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Unable to find tracks right now"
+                        errorMessage = "Gagal mencari lagu saat ini"
                     )
                 }
             }

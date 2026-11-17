@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -56,16 +57,14 @@ fun PlaylistsScreen(
     val localPlaylists = uiState.playlists.filter { !it.isSpotifyImport }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
+        modifier = modifier.fillMaxSize()
     ) {
         GlassTopBar(
-            title = "Playlists",
-            subtitle = "Your Collections"
+            title = "Playlist",
+            subtitle = "Koleksi Daftar Putar"
         )
 
-        // Action Buttons Row: [+ Import Playlist] and [+ Create Playlist]
+        // Action Buttons Row: [+ Impor Spotify] and [+ Buat Baru]
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -73,14 +72,14 @@ fun PlaylistsScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             GlassButton(
-                text = "Import Playlist",
+                text = "Impor Spotify",
                 icon = Icons.Filled.CloudDownload,
                 isPrimary = true,
                 onClick = { viewModel.openImportDialog() },
                 modifier = Modifier.weight(1f)
             )
             GlassButton(
-                text = "Create",
+                text = "Buat Baru",
                 icon = Icons.Filled.Add,
                 isPrimary = false,
                 onClick = { viewModel.openCreateDialog() },
@@ -115,15 +114,17 @@ fun PlaylistsScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "No music here yet",
+                        text = "Belum ada playlist",
                         style = GlassTypography.headlineMedium,
-                        color = glassConfig.textPrimary
+                        color = glassConfig.textPrimary,
+                        textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Import a playlist from Spotify and make the room yours.",
+                        text = "Impor playlist dari Spotify atau buat daftar putarmu sendiri.",
                         style = GlassTypography.bodyMedium,
-                        color = glassConfig.textSecondary
+                        color = glassConfig.textSecondary,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -136,8 +137,8 @@ fun PlaylistsScreen(
                 if (spotifyPlaylists.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "Imported from Spotify",
-                            subtitle = "Synced seamlessly from Spotify"
+                            title = "Impor dari Spotify",
+                            subtitle = "Tersinkron langsung dari Spotify"
                         )
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
@@ -162,8 +163,8 @@ fun PlaylistsScreen(
                 if (localPlaylists.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "Your Playlists",
-                            subtitle = "Mixes created on Veloura"
+                            title = "Playlist Kamu",
+                            subtitle = "Daftar putar buatan di Veloura"
                         )
                     }
                     itemsIndexed(
@@ -215,7 +216,7 @@ fun PlaylistsScreen(
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "${p.trackCount} tracks",
+                                            text = "${p.trackCount} lagu",
                                             style = GlassTypography.bodyMedium,
                                             color = glassConfig.textSecondary
                                         )
@@ -235,13 +236,13 @@ fun PlaylistsScreen(
         GlassDialog(onDismissRequest = { viewModel.closeImportDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Import Playlist",
+                    text = "Impor Playlist",
                     style = GlassTypography.headlineMedium,
                     color = glassConfig.textPrimary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Paste a Spotify playlist URL to match and import into Glassroom.",
+                    text = "Tempel tautan playlist Spotify untuk dicocokkan dan diimpor ke Veloura.",
                     style = GlassTypography.bodyMedium,
                     color = glassConfig.textSecondary
                 )
@@ -289,7 +290,7 @@ fun PlaylistsScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Reading playlist...",
+                                text = "Membaca playlist...",
                                 style = GlassTypography.bodyMedium,
                                 color = glassConfig.textPrimary
                             )
@@ -299,7 +300,7 @@ fun PlaylistsScreen(
                     ImportStatus.SEARCHING_MATCHES -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "Found ${uiState.importState.totalTracks} tracks",
+                                text = "Ditemukan ${uiState.importState.totalTracks} lagu",
                                 style = GlassTypography.titleMedium,
                                 color = glassConfig.textPrimary
                             )
@@ -315,7 +316,7 @@ fun PlaylistsScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Matching: ${uiState.importState.currentSearchingTitle}",
+                                text = "Mencocokkan: ${uiState.importState.currentSearchingTitle}",
                                 style = GlassTypography.labelSmall,
                                 color = glassConfig.textSecondary
                             )
@@ -365,7 +366,7 @@ fun PlaylistsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Playlist imported successfully!",
+                                text = "Playlist berhasil diimpor!",
                                 style = GlassTypography.titleMedium,
                                 color = GlassAccentMint
                             )
@@ -374,7 +375,7 @@ fun PlaylistsScreen(
 
                     ImportStatus.ERROR -> {
                         Text(
-                            text = uiState.importState.errorMessage ?: "Something went wrong.",
+                            text = uiState.importState.errorMessage ?: "Terjadi kesalahan saat mengimpor.",
                             style = GlassTypography.bodyMedium,
                             color = Color(0xFFDC2626)
                         )
@@ -391,13 +392,13 @@ fun PlaylistsScreen(
                     horizontalArrangement = Arrangement.End
                 ) {
                     GlassButton(
-                        text = if (uiState.importState.status == ImportStatus.SUCCESS) "Done" else "Cancel",
+                        text = if (uiState.importState.status == ImportStatus.SUCCESS) "Selesai" else "Batal",
                         onClick = { viewModel.closeImportDialog() }
                     )
                     if (uiState.importState.status != ImportStatus.SUCCESS) {
                         Spacer(modifier = Modifier.width(8.dp))
                         GlassButton(
-                            text = "IMPORT",
+                            text = "IMPOR",
                             isPrimary = true,
                             onClick = { viewModel.startSpotifyImport() }
                         )
@@ -413,7 +414,7 @@ fun PlaylistsScreen(
         GlassDialog(onDismissRequest = { viewModel.closeCreateDialog() }) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "New Playlist",
+                    text = "Playlist Baru",
                     style = GlassTypography.headlineMedium,
                     color = glassConfig.textPrimary
                 )
@@ -429,7 +430,7 @@ fun PlaylistsScreen(
                 ) {
                     if (newPlaylistName.isEmpty()) {
                         Text(
-                            text = "Playlist Name",
+                            text = "Nama Playlist",
                             style = GlassTypography.bodyLarge,
                             color = glassConfig.textTertiary
                         )
@@ -456,7 +457,7 @@ fun PlaylistsScreen(
                 ) {
                     if (newPlaylistDesc.isEmpty()) {
                         Text(
-                            text = "Description (optional)",
+                            text = "Deskripsi (opsional)",
                             style = GlassTypography.bodyLarge,
                             color = glassConfig.textTertiary
                         )
@@ -478,12 +479,12 @@ fun PlaylistsScreen(
                     horizontalArrangement = Arrangement.End
                 ) {
                     GlassButton(
-                        text = "Cancel",
+                        text = "Batal",
                         onClick = { viewModel.closeCreateDialog() }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     GlassButton(
-                        text = "Create",
+                        text = "Buat",
                         isPrimary = true,
                         onClick = {
                             viewModel.createNewPlaylist(newPlaylistName, newPlaylistDesc)

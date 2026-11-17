@@ -148,7 +148,7 @@ fun GlassPlaylistCard(
         val subtitle = if (playlist.description.isNotBlank() && playlist.description != playlist.name) {
             playlist.description
         } else {
-            "${playlist.trackCount} tracks"
+            "${playlist.trackCount} lagu"
         }
         Text(
             text = subtitle,

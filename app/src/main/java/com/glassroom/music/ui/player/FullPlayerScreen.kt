@@ -138,7 +138,7 @@ fun FullPlayerScreen(
                 .fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = "No track selected", style = GlassTypography.bodyLarge, color = glassConfig.textSecondary)
+            Text(text = "Belum ada lagu dipilih", style = GlassTypography.bodyLarge, color = glassConfig.textSecondary)
         }
         return
     }
@@ -236,7 +236,7 @@ fun FullPlayerScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "PLAYING FROM",
+                        text = "DIPUTAR DARI",
                         style = GlassTypography.labelSmall,
                         color = glassConfig.textTertiary,
                         fontSize = 10.sp

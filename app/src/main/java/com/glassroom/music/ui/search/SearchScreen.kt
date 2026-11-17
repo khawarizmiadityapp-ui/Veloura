@@ -61,7 +61,7 @@ fun SearchScreen(
             GlassSearchBar(
                 query = uiState.query,
                 onQueryChange = viewModel::onQueryChange,
-                placeholder = "Search songs, artists, albums..."
+                placeholder = "Cari lagu, artis, album, atau playlist..."
             )
         }
 
@@ -82,7 +82,7 @@ fun SearchScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         val hasAnyResults = uiState.results.isNotEmpty() ||
-            (uiState.selectedCategory == "Playlists" && uiState.matchedPlaylists.isNotEmpty())
+            (uiState.selectedCategory == "Playlist" && uiState.matchedPlaylists.isNotEmpty())
 
         when {
             uiState.isLoading -> {
@@ -98,19 +98,19 @@ fun SearchScreen(
 
             !hasAnyResults && uiState.query.isNotBlank() -> {
                 SearchEmptyState(
-                    title = "No matching results",
-                    subtitle = "Try searching for a different track, artist, or playlist."
+                    title = "Tidak ada hasil yang cocok",
+                    subtitle = "Coba kata kunci lagu, artis, atau playlist lain."
                 )
             }
 
             !hasAnyResults -> {
                 SearchEmptyState(
-                    title = "Search anything",
-                    subtitle = "Explore millions of songs, artists, albums, and playlists."
+                    title = "Cari apa saja",
+                    subtitle = "Jelajahi jutaan lagu, artis, album, dan playlist."
                 )
             }
 
-            uiState.selectedCategory == "Artists" -> {
+            uiState.selectedCategory == "Artis" -> {
                 val groupedArtists = remember(uiState.results) {
                     uiState.results
                         .filter { it.artist.isNotBlank() }
@@ -161,7 +161,7 @@ fun SearchScreen(
                 }
             }
 
-            uiState.selectedCategory == "Albums" -> {
+            uiState.selectedCategory == "Album" -> {
                 val groupedAlbums = remember(uiState.results) {
                     uiState.results
                         .groupBy { track ->
@@ -228,7 +228,7 @@ fun SearchScreen(
                 }
             }
 
-            uiState.selectedCategory == "Playlists" -> {
+            uiState.selectedCategory == "Playlist" -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
@@ -249,7 +249,7 @@ fun SearchScreen(
                         ) { _, playlist ->
                             GroupedSearchCard(
                                 title = playlist.name,
-                                subtitle = "${playlist.trackCount} lagu • ${if (playlist.isSpotifyImport) "Spotify Import" else "Playlist Lokal"}",
+                                subtitle = "${playlist.trackCount} lagu • ${if (playlist.isSpotifyImport) "Impor Spotify" else "Playlist Lokal"}",
                                 thumbnail = playlist.artwork,
                                 fallbackIcon = Icons.Filled.LibraryMusic,
                                 circularThumb = false,

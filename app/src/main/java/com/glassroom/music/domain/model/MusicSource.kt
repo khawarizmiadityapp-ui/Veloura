@@ -11,12 +11,12 @@ sealed interface MusicSource {
 
     data object SpotifyMetadata : MusicSource {
         override val id: String = "spotify"
-        override val displayName: String = "Spotify Playlist Import"
+        override val displayName: String = "Impor Spotify"
     }
 
     data object Curated : MusicSource {
         override val id: String = "curated"
-        override val displayName: String = "Glassroom Curated"
+        override val displayName: String = "Pilihan Veloura"
     }
 
     data class CustomSource(override val id: String, override val displayName: String) : MusicSource

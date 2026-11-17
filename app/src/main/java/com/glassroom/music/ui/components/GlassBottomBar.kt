@@ -38,11 +38,11 @@ data class BottomNavItem(
 )
 
 val BottomNavItems = listOf(
-    BottomNavItem("home", "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    BottomNavItem("search", "Search", Icons.Filled.Search, Icons.Outlined.Search),
-    BottomNavItem("library", "Library", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder),
-    BottomNavItem("playlists", "Playlists", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
-    BottomNavItem("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    BottomNavItem("home", "Beranda", Icons.Filled.Home, Icons.Outlined.Home),
+    BottomNavItem("search", "Cari", Icons.Filled.Search, Icons.Outlined.Search),
+    BottomNavItem("library", "Koleksi", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder),
+    BottomNavItem("playlists", "Playlist", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
+    BottomNavItem("settings", "Setelan", Icons.Filled.Settings, Icons.Outlined.Settings)
 )
 
 @Composable
