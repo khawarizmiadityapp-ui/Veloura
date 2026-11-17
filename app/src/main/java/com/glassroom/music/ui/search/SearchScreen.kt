@@ -10,6 +10,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -18,8 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.glassroom.music.domain.model.Playlist
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.theme.*
@@ -31,6 +41,7 @@ fun SearchScreen(
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
     onTrackMoreClick: (Track) -> Unit = {},
+    onPlaylistClick: (Playlist) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -70,114 +81,404 @@ fun SearchScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Results or Empty/Loading State
-        if (uiState.isLoading) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                repeat(5) { GlassSongSkeleton() }
+        val hasAnyResults = uiState.results.isNotEmpty() ||
+            (uiState.selectedCategory == "Playlists" && uiState.matchedPlaylists.isNotEmpty())
+
+        when {
+            uiState.isLoading -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(5) { GlassSongSkeleton() }
+                }
             }
-        } else if (uiState.results.isEmpty() && uiState.query.isNotBlank()) {
-            // No Results Found Empty State
+
+            !hasAnyResults && uiState.query.isNotBlank() -> {
+                SearchEmptyState(
+                    title = "No matching results",
+                    subtitle = "Try searching for a different track, artist, or playlist."
+                )
+            }
+
+            !hasAnyResults -> {
+                SearchEmptyState(
+                    title = "Search anything",
+                    subtitle = "Explore millions of songs, artists, albums, and playlists."
+                )
+            }
+
+            uiState.selectedCategory == "Artists" -> {
+                val groupedArtists = remember(uiState.results) {
+                    uiState.results
+                        .filter { it.artist.isNotBlank() }
+                        .groupBy { it.artist }
+                        .entries
+                        .sortedByDescending { it.value.size }
+                        .toList()
+                }
+                val activeArtistTracks = uiState.selectedArtist?.let { artist ->
+                    groupedArtists.firstOrNull { it.key == artist }?.value
+                }
+
+                if (uiState.selectedArtist != null && activeArtistTracks != null) {
+                    DrillDownHeader(
+                        title = uiState.selectedArtist!!,
+                        subtitle = "${activeArtistTracks.size} lagu ditemukan",
+                        onBack = { viewModel.selectArtist(null) }
+                    )
+                    SearchTrackList(
+                        tracks = activeArtistTracks,
+                        keyPrefix = "search_art_track",
+                        currentPlayingTrack = currentPlayingTrack,
+                        isPlaying = isPlaying,
+                        onTrackClick = onTrackClick,
+                        onFavoriteClick = viewModel::toggleFavorite,
+                        onMoreClick = onTrackMoreClick
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            items = groupedArtists,
+                            key = { idx, entry -> "search_artist_${entry.key}_$idx" }
+                        ) { _, (artist, tracks) ->
+                            GroupedSearchCard(
+                                title = artist,
+                                subtitle = "${tracks.size} lagu • ${tracks.firstOrNull()?.title.orEmpty()}",
+                                thumbnail = tracks.firstOrNull()?.thumbnail.orEmpty(),
+                                fallbackIcon = Icons.Filled.Person,
+                                circularThumb = true,
+                                onClick = { viewModel.selectArtist(artist) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            uiState.selectedCategory == "Albums" -> {
+                val groupedAlbums = remember(uiState.results) {
+                    uiState.results
+                        .groupBy { track ->
+                            if (track.album.isNotBlank() && !track.album.equals("YouTube Audio", ignoreCase = true)) {
+                                track.album
+                            } else {
+                                track.title
+                            }
+                        }
+                        .entries
+                        .toList()
+                }
+                val activeAlbumTracks = uiState.selectedAlbum?.let { albumName ->
+                    groupedAlbums.firstOrNull { it.key == albumName }?.value
+                }
+
+                if (uiState.selectedAlbum != null && activeAlbumTracks != null) {
+                    DrillDownHeader(
+                        title = uiState.selectedAlbum!!,
+                        subtitle = "${activeAlbumTracks.size} lagu",
+                        onBack = { viewModel.selectAlbum(null) }
+                    )
+                    SearchTrackList(
+                        tracks = activeAlbumTracks,
+                        keyPrefix = "search_alb_track",
+                        currentPlayingTrack = currentPlayingTrack,
+                        isPlaying = isPlaying,
+                        onTrackClick = onTrackClick,
+                        onFavoriteClick = viewModel::toggleFavorite,
+                        onMoreClick = onTrackMoreClick
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            items = groupedAlbums,
+                            key = { idx, entry -> "search_album_${entry.key}_$idx" }
+                        ) { _, (albumTitle, tracks) ->
+                            val first = tracks.first()
+                            val subtitle = if (tracks.size > 1) {
+                                "${first.artist} • ${tracks.size} lagu"
+                            } else {
+                                "${first.artist} • ${first.durationFormatted}"
+                            }
+                            GroupedSearchCard(
+                                title = albumTitle,
+                                subtitle = subtitle,
+                                thumbnail = first.thumbnail,
+                                fallbackIcon = Icons.Filled.Album,
+                                circularThumb = false,
+                                onClick = {
+                                    if (tracks.size == 1) {
+                                        onTrackClick(first, uiState.results)
+                                    } else {
+                                        viewModel.selectAlbum(albumTitle)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            uiState.selectedCategory == "Playlists" -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (uiState.matchedPlaylists.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Playlist Tersimpan & Spotify",
+                                style = GlassTypography.titleMedium,
+                                color = glassConfig.textSecondary,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                        itemsIndexed(
+                            items = uiState.matchedPlaylists,
+                            key = { idx, pl -> "search_saved_pl_${pl.id}_$idx" }
+                        ) { _, playlist ->
+                            GroupedSearchCard(
+                                title = playlist.name,
+                                subtitle = "${playlist.trackCount} lagu • ${if (playlist.isSpotifyImport) "Spotify Import" else "Playlist Lokal"}",
+                                thumbnail = playlist.artwork,
+                                fallbackIcon = Icons.Filled.LibraryMusic,
+                                circularThumb = false,
+                                onClick = { onPlaylistClick(playlist) }
+                            )
+                        }
+                    }
+
+                    if (uiState.results.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Mix & Kompilasi YouTube",
+                                style = GlassTypography.titleMedium,
+                                color = glassConfig.textSecondary,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                            )
+                        }
+                        itemsIndexed(
+                            items = uiState.results,
+                            key = { index, track -> "search_pl_yt_${track.id}_$index" }
+                        ) { _, track ->
+                            GlassSongCard(
+                                track = track,
+                                isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
+                                onClick = { onTrackClick(track, uiState.results) },
+                                onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                onMoreClick = { onTrackMoreClick(track) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                SearchTrackList(
+                    tracks = uiState.results,
+                    keyPrefix = "search",
+                    currentPlayingTrack = currentPlayingTrack,
+                    isPlaying = isPlaying,
+                    onTrackClick = onTrackClick,
+                    onFavoriteClick = viewModel::toggleFavorite,
+                    onMoreClick = onTrackMoreClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTrackList(
+    tracks: List<Track>,
+    keyPrefix: String,
+    currentPlayingTrack: Track?,
+    isPlaying: Boolean,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onFavoriteClick: (Track) -> Unit,
+    onMoreClick: (Track) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        itemsIndexed(
+            items = tracks,
+            key = { index, track -> "${keyPrefix}_${track.id}_$index" }
+        ) { _, track ->
+            GlassSongCard(
+                track = track,
+                isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
+                onClick = { onTrackClick(track, tracks) },
+                onFavoriteClick = { onFavoriteClick(track) },
+                onMoreClick = { onMoreClick(track) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrillDownHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit
+) {
+    val glassConfig = LocalGlassConfig.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+    ) {
+        GlassIconButton(
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            onClick = onBack,
+            size = 38.dp,
+            iconSize = 18.dp,
+            contentDescription = "Back"
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = GlassTypography.titleMedium,
+                color = glassConfig.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = GlassTypography.labelSmall,
+                color = glassConfig.textSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupedSearchCard(
+    title: String,
+    subtitle: String,
+    thumbnail: String,
+    fallbackIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    circularThumb: Boolean,
+    onClick: () -> Unit
+) {
+    val glassConfig = LocalGlassConfig.current
+    val shape = if (circularThumb) CircleShape else RoundedCornerShape(14.dp)
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 32.dp),
+                    .size(50.dp)
+                    .clip(shape)
+                    .background(glassConfig.placeholderBrush)
+                    .border(0.8.dp, glassConfig.borderBrush, shape),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
-                            .clip(CircleShape)
-                            .background(brush = glassConfig.cardBrush)
-                            .border(1.dp, glassConfig.borderBrush, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = null,
-                            tint = glassConfig.textTertiary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No matching songs",
-                        style = GlassTypography.headlineMedium,
-                        color = glassConfig.textPrimary
+                if (thumbnail.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(thumbnail)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Try searching for a different track, artist, or album.",
-                        style = GlassTypography.bodyMedium,
-                        color = glassConfig.textSecondary
+                } else {
+                    Icon(
+                        imageVector = fallbackIcon,
+                        contentDescription = null,
+                        tint = glassConfig.textSecondary,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
-        } else if (uiState.results.isEmpty()) {
-            // Initial Empty State
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = GlassTypography.titleMedium,
+                    color = glassConfig.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = GlassTypography.labelSmall,
+                    color = glassConfig.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = glassConfig.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchEmptyState(title: String, subtitle: String) {
+    val glassConfig = LocalGlassConfig.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 32.dp),
+                    .size(72.dp)
+                    .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
+                    .clip(CircleShape)
+                    .background(brush = glassConfig.cardBrush)
+                    .border(1.dp, glassConfig.borderBrush, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
-                            .clip(CircleShape)
-                            .background(brush = glassConfig.cardBrush)
-                            .border(1.dp, glassConfig.borderBrush, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = null,
-                            tint = glassConfig.textTertiary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Search anything",
-                        style = GlassTypography.headlineMedium,
-                        color = glassConfig.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Explore millions of songs, artists, and playlists.",
-                        style = GlassTypography.bodyMedium,
-                        color = glassConfig.textSecondary
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = glassConfig.textTertiary,
+                    modifier = Modifier.size(32.dp)
+                )
             }
-        } else {
-            // Results List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 150.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(
-                    items = uiState.results,
-                    key = { index, track -> "search_${track.id}_$index" }
-                ) { _, track ->
-                    GlassSongCard(
-                        track = track,
-                        isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
-                        onClick = { onTrackClick(track, uiState.results) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { onTrackMoreClick(track) }
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = title,
+                style = GlassTypography.headlineMedium,
+                color = glassConfig.textPrimary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                style = GlassTypography.bodyMedium,
+                color = glassConfig.textSecondary
+            )
         }
     }
 }

@@ -2,6 +2,7 @@ package com.glassroom.music.ui.queue
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -10,21 +11,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
-import com.glassroom.music.playback.PlayerManager
-import com.glassroom.music.ui.components.GlassButton
+import com.glassroom.music.ui.components.GlassCard
+import com.glassroom.music.ui.components.GlassChip
 import com.glassroom.music.ui.components.GlassIconButton
 import com.glassroom.music.ui.components.GlassSongCard
 import com.glassroom.music.ui.theme.*
@@ -39,10 +47,16 @@ fun QueueSheet(
     onTrackSelect: (Int) -> Unit,
     onRemoveFromQueue: (Int) -> Unit,
     onClearQueue: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onReorderQueue: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> }
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val glassConfig = LocalGlassConfig.current
+    var isReordering by remember { mutableStateOf(false) }
+
+    val upcomingTracks = remember(queue, currentIndex) {
+        queue.filterIndexed { index, _ -> index > currentIndex }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -81,7 +95,7 @@ fun QueueSheet(
                         color = glassConfig.textPrimary
                     )
                     Text(
-                        text = "${queue.size} songs in line",
+                        text = "${queue.size} lagu di antrean",
                         style = GlassTypography.labelSmall,
                         color = glassConfig.textTertiary
                     )
@@ -123,15 +137,29 @@ fun QueueSheet(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Up Next Section
-            Text(
-                text = "Up Next",
-                style = GlassTypography.titleMedium,
-                color = glassConfig.textSecondary,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+            // Up Next Header + Reorder Mode Toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Up Next (${upcomingTracks.size})",
+                    style = GlassTypography.titleMedium,
+                    color = glassConfig.textSecondary
+                )
+                if (upcomingTracks.size > 1) {
+                    GlassChip(
+                        text = if (isReordering) "Selesai" else "Atur Urutan",
+                        isSelected = isReordering,
+                        onClick = { isReordering = !isReordering }
+                    )
+                }
+            }
 
-            if (queue.isEmpty() || queue.size == 1) {
+            if (queue.isEmpty() || queue.size == 1 || upcomingTracks.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -139,7 +167,7 @@ fun QueueSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No upcoming tracks in queue",
+                        text = if (queue.size <= 1) "Tidak ada lagu berikutnya di antrean" else "Akhir antrean tercapai",
                         style = GlassTypography.bodyMedium,
                         color = glassConfig.textTertiary
                     )
@@ -150,32 +178,164 @@ fun QueueSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    val upcomingTracks = queue.filterIndexed { index, _ -> index > currentIndex }
-
-                    if (upcomingTracks.isEmpty()) {
-                        item {
-                            Text(
-                                text = "End of queue reached",
-                                style = GlassTypography.bodyMedium,
-                                color = glassConfig.textTertiary,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else {
-                        itemsIndexed(
-                            items = upcomingTracks,
-                            key = { offset, track -> "queue_${track.id}_$offset" }
-                        ) { offset, track ->
-                            val actualIndex = currentIndex + 1 + offset
-                            GlassSongCard(
-                                track = track,
-                                isPlaying = false,
-                                onClick = { onTrackSelect(actualIndex) },
-                                onMoreClick = { onRemoveFromQueue(actualIndex) }
-                            )
-                        }
+                    itemsIndexed(
+                        items = upcomingTracks,
+                        key = { offset, track -> "queue_${track.id}_$offset" }
+                    ) { offset, track ->
+                        val actualIndex = currentIndex + 1 + offset
+                        QueueUpcomingRow(
+                            track = track,
+                            isReordering = isReordering,
+                            canMoveUp = offset > 0,
+                            canMoveDown = offset < upcomingTracks.lastIndex,
+                            onSelect = { onTrackSelect(actualIndex) },
+                            onMoveUp = { onReorderQueue(actualIndex, actualIndex - 1) },
+                            onMoveDown = { onReorderQueue(actualIndex, actualIndex + 1) },
+                            onRemove = { onRemoveFromQueue(actualIndex) }
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueUpcomingRow(
+    track: Track,
+    isReordering: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onSelect: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val glassConfig = LocalGlassConfig.current
+
+    GlassCard(
+        onClick = if (isReordering) null else onSelect,
+        shape = RoundedCornerShape(18.dp),
+        elevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(glassConfig.placeholderBrush)
+                    .border(0.8.dp, glassConfig.borderBrush, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (track.thumbnail.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(track.thumbnail)
+                            .crossfade(true)
+                            .memoryCacheKey(track.id.ifBlank { track.thumbnail })
+                            .build(),
+                        contentDescription = track.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = glassConfig.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    style = GlassTypography.titleMedium,
+                    color = glassConfig.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = track.artist,
+                    style = GlassTypography.bodyMedium,
+                    color = glassConfig.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (track.duration > 0 && !isReordering) {
+                Text(
+                    text = track.durationFormatted,
+                    style = GlassTypography.labelSmall,
+                    color = glassConfig.textTertiary,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
+
+            if (isReordering) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .alpha(if (canMoveUp) 1f else 0.3f)
+                            .clip(CircleShape)
+                            .background(glassConfig.inactiveTrackColor)
+                            .clickable(enabled = canMoveUp, onClick = onMoveUp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowUp,
+                            contentDescription = "Naikkan",
+                            tint = glassConfig.textPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .alpha(if (canMoveDown) 1f else 0.3f)
+                            .clip(CircleShape)
+                            .background(glassConfig.inactiveTrackColor)
+                            .clickable(enabled = canMoveDown, onClick = onMoveDown),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "Turunkan",
+                            tint = glassConfig.textPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Hapus dari antrean",
+                    tint = glassConfig.textTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

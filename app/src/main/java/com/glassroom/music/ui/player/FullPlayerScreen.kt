@@ -518,7 +518,10 @@ fun FullPlayerScreen(
                     playerManager.clearQueue()
                     showQueueSheet = false
                 },
-                onDismiss = { showQueueSheet = false }
+                onDismiss = { showQueueSheet = false },
+                onReorderQueue = { fromIdx, toIdx ->
+                    playerManager.reorderQueue(fromIdx, toIdx)
+                }
             )
         }
     }

@@ -638,7 +638,23 @@ def search():
         return jsonify({"tracks": [], "artists": [], "albums": []})
         
     try:
-        tracks = search_tracks(query, limit=12)
+        search_q = query
+        if category == "albums" and "album" not in query.lower():
+            search_q = f"{query} full album"
+        elif category == "playlists" and "playlist" not in query.lower() and "mix" not in query.lower():
+            search_q = f"{query} mix playlist"
+
+        raw_tracks = search_tracks(search_q, limit=18)
+        if category == "songs":
+            song_candidates = [
+                t for t in raw_tracks
+                if (t.get("duration") or 0) == 0 or (1 <= t.get("duration", 0) <= 720)
+            ]
+            tracks = song_candidates if len(song_candidates) >= 3 else raw_tracks
+        else:
+            tracks = raw_tracks
+
+        tracks = tracks[:12]
         artists = list({t["artist"] for t in tracks if t.get("artist")})
         albums = list({t["album"] for t in tracks if t.get("album")})
         

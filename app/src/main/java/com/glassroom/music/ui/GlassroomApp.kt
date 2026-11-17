@@ -174,6 +174,9 @@ fun GlassroomApp(
                         isPlaying = isPlaying,
                         onTrackMoreClick = { track ->
                             selectedTrackOptions = track to null
+                        },
+                        onPlaylistClick = { playlist ->
+                            navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id))
                         }
                     )
                 }
@@ -229,6 +232,10 @@ fun GlassroomApp(
                         isPlaying = isPlaying,
                         onTrackMoreClick = { track ->
                             selectedTrackOptions = track to playlistId
+                        },
+                        musicRepository = app.container.musicRepository,
+                        onShowMessage = { msg ->
+                            actionFeedbackMessage = msg
                         }
                     )
                 }

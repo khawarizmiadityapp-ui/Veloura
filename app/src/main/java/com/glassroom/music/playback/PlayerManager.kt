@@ -630,19 +630,26 @@ class PlayerManager(
                 val newIdx = index.coerceAtMost(currentList.size - 1)
                 _currentIndex.value = newIdx
                 playCurrentIndex()
+                return
             }
+            persistSession()
         }
     }
 
     fun reorderQueue(fromIndex: Int, toIndex: Int) {
         val currentList = _queue.value.toMutableList()
-        if (fromIndex in currentList.indices && toIndex in currentList.indices) {
+        if (fromIndex in currentList.indices && toIndex in currentList.indices && fromIndex != toIndex) {
             val item = currentList.removeAt(fromIndex)
             currentList.add(toIndex, item)
             _queue.value = currentList
-            if (fromIndex == _currentIndex.value) {
-                _currentIndex.value = toIndex
+            val currentIdx = _currentIndex.value
+            _currentIndex.value = when {
+                fromIndex == currentIdx -> toIndex
+                fromIndex < currentIdx && toIndex >= currentIdx -> currentIdx - 1
+                fromIndex > currentIdx && toIndex <= currentIdx -> currentIdx + 1
+                else -> currentIdx
             }
+            persistSession()
         }
     }
 
@@ -656,6 +663,11 @@ class PlayerManager(
         exoPlayer.clearMediaItems()
         _isPlaying.value = false
         _isLoading.value = false
+        preferencesManager?.let { prefs ->
+            scope.launch(Dispatchers.IO) {
+                prefs.savePlaybackSession(emptyList(), 0, 0L)
+            }
+        }
     }
 
     private fun triggerAutoplaySimilarTrack(seedTrack: Track) {
