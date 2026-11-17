@@ -222,15 +222,15 @@ data class GlassConfig(
             return if (isDark) {
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF242E40).copy(alpha = (factor * 0.75f).coerceIn(0.48f, 0.85f)),
-                        Color(0xFF101520).copy(alpha = (factor * 0.60f).coerceIn(0.36f, 0.72f))
+                        Color(0xFF222C3E).copy(alpha = (0.86f + factor * 0.10f).coerceIn(0.86f, 0.96f)),
+                        Color(0xFF101520).copy(alpha = (0.82f + factor * 0.12f).coerceIn(0.82f, 0.94f))
                     )
                 )
             } else {
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = (factor * 0.88f).coerceIn(0.60f, 0.94f)),
-                        Color(0xFFF1F5F9).copy(alpha = (factor * 0.68f).coerceIn(0.42f, 0.80f))
+                        Color.White.copy(alpha = (0.90f + factor * 0.08f).coerceIn(0.90f, 0.98f)),
+                        Color(0xFFF1F5F9).copy(alpha = (0.84f + factor * 0.12f).coerceIn(0.84f, 0.96f))
                     )
                 )
             }

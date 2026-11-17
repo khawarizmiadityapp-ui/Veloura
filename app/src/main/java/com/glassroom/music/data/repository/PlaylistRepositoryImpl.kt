@@ -86,4 +86,8 @@ class PlaylistRepositoryImpl(
     override suspend fun addToRecentlyPlayed(track: Track) {
         localDataSource.recordPlayed(track)
     }
+
+    override suspend fun getTracksByIds(trackIds: Set<String>): List<Track> {
+        return localDataSource.getTracksByIds(trackIds)
+    }
 }

@@ -78,9 +78,35 @@ fun GlassroomApp(
 
     val allPlaylists by app.container.playlistRepository.getAllPlaylists()
         .collectAsState(initial = emptyList())
+    val downloadedIds by app.container.offlineAudioManager.downloadedTrackIds.collectAsState()
+    val downloadingIds by app.container.offlineAudioManager.downloadingTrackIds.collectAsState()
     var selectedTrackOptions by remember { mutableStateOf<Pair<Track, String?>?>(null) }
     var existingPlaylistIdsForTrack by remember { mutableStateOf<Set<String>>(emptySet()) }
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
+
+    fun handleToggleOfflineDownload(track: Track) {
+        if (track.id in downloadingIds) {
+            actionFeedbackMessage = "Sedang mengunduh ${track.title}..."
+            return
+        }
+        coroutineScope.launch {
+            if (track.id in downloadedIds) {
+                app.container.offlineAudioManager.deleteOfflineTrack(track.id)
+                actionFeedbackMessage = "Unduhan offline dihapus"
+            } else {
+                actionFeedbackMessage = "Mengunduh \"${track.title}\"..."
+                val result = app.container.offlineAudioManager.downloadTrack(
+                    track = track,
+                    musicRepository = app.container.musicRepository
+                )
+                actionFeedbackMessage = if (result.isSuccess) {
+                    "\"${track.title}\" tersimpan untuk offline"
+                } else {
+                    "Gagal mengunduh: ${result.exceptionOrNull()?.localizedMessage ?: "Error"}"
+                }
+            }
+        }
+    }
 
     LaunchedEffect(selectedTrackOptions) {
         existingPlaylistIdsForTrack = selectedTrackOptions?.first?.let { track ->
@@ -183,7 +209,10 @@ fun GlassroomApp(
 
                 composable(Screen.Library.route) {
                     val libraryViewModel: LibraryViewModel = viewModel {
-                        LibraryViewModel(app.container.playlistRepository)
+                        LibraryViewModel(
+                            app.container.playlistRepository,
+                            app.container.offlineAudioManager
+                        )
                     }
                     LibraryScreen(
                         viewModel = libraryViewModel,
@@ -334,6 +363,11 @@ fun GlassroomApp(
                     onMoreOptions = { track ->
                         selectedTrackOptions = track to null
                     },
+                    isTrackDownloaded = currentTrack?.id in downloadedIds,
+                    isTrackDownloading = currentTrack?.id in downloadingIds,
+                    onToggleOfflineDownload = { track ->
+                        handleToggleOfflineDownload(track)
+                    },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this@AnimatedVisibility
                 )
@@ -401,6 +435,11 @@ fun GlassroomApp(
                     existingPlaylistIds = existingPlaylistIdsForTrack,
                     isFavorite = isSelectedFavorite,
                     sourcePlaylistId = sourcePlaylistId,
+                    isDownloaded = selectedTrack.id in downloadedIds,
+                    isDownloading = selectedTrack.id in downloadingIds,
+                    onToggleOfflineDownload = {
+                        handleToggleOfflineDownload(selectedTrack)
+                    },
                     onAddToPlaylist = { targetPlaylist ->
                         coroutineScope.launch {
                             app.container.playlistRepository.addTrackToPlaylist(targetPlaylist.id, selectedTrack)

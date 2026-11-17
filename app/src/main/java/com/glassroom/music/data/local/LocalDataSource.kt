@@ -56,6 +56,25 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
         }
     }
 
+    suspend fun getTracksByIds(trackIds: Set<String>): List<Track> = withContext(Dispatchers.IO) {
+        if (trackIds.isEmpty()) return@withContext emptyList()
+        val db = dbHelper.readableDatabase
+        val favIds = readFavoriteTrackIds(db)
+        val placeholders = trackIds.joinToString(",") { "?" }
+        val cursor = db.rawQuery(
+            "SELECT * FROM ${GlassroomDbHelper.TABLE_TRACKS} WHERE id IN ($placeholders)",
+            trackIds.toTypedArray()
+        )
+        val result = mutableListOf<Track>()
+        cursor.use {
+            while (it.moveToNext()) {
+                val track = mapCursorToTrack(it)
+                result.add(track.copy(isFavorite = track.id in favIds))
+            }
+        }
+        result
+    }
+
     fun getAllPlaylistsFlow(): Flow<List<Playlist>> {
         return dbHelper.playlistsVersion.map {
             withContext(Dispatchers.IO) {

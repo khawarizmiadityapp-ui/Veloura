@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -33,9 +37,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
@@ -53,6 +59,9 @@ fun FullPlayerScreen(
     onToggleFavorite: () -> Unit,
     onCollapse: () -> Unit,
     onMoreOptions: ((Track) -> Unit)? = null,
+    isTrackDownloaded: Boolean = false,
+    isTrackDownloading: Boolean = false,
+    onToggleOfflineDownload: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
@@ -69,9 +78,19 @@ fun FullPlayerScreen(
     val isLyricsLoading by playerManager.isLyricsLoading.collectAsState()
     val isLoading by playerManager.isLoading.collectAsState()
     val playbackError by playerManager.playbackError.collectAsState()
+    val sleepTimerRemainingMs by playerManager.sleepTimerRemainingMs.collectAsState()
+    val sleepStopAfterTrack by playerManager.sleepStopAfterCurrentTrack.collectAsState()
 
     var showQueueSheet by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+
+    var artworkDragX by remember { mutableFloatStateOf(0f) }
+    val animatedArtworkOffsetX by animateFloatAsState(
+        targetValue = artworkDragX,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "artwork_swipe_x"
+    )
 
     // Artwork floating and subtle pulsing animation when playing
     val infiniteTransition = rememberInfiniteTransition(label = "artwork_float")
@@ -330,8 +349,23 @@ fun FullPlayerScreen(
                     ) {
                         Box(
                             modifier = artworkSharedModifier
-                                .size(285.dp)
+                                .size(268.dp)
+                                .offset { IntOffset(animatedArtworkOffsetX.roundToInt(), 0) }
                                 .scale(artworkScale)
+                                .draggable(
+                                    orientation = Orientation.Horizontal,
+                                    state = rememberDraggableState { delta ->
+                                        artworkDragX = (artworkDragX + delta).coerceIn(-180f, 180f)
+                                    },
+                                    onDragStopped = {
+                                        if (artworkDragX <= -95f) {
+                                            playerManager.skipNext()
+                                        } else if (artworkDragX >= 95f) {
+                                            playerManager.skipPrevious()
+                                        }
+                                        artworkDragX = 0f
+                                    }
+                                )
                                 .shadow(
                                     elevation = if (glassConfig.isPaper) 16.dp else 28.dp,
                                     shape = RoundedCornerShape(32.dp),
@@ -394,7 +428,7 @@ fun FullPlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Track Title, Artist & Favorite Button with smooth animation on change
             Row(
@@ -484,7 +518,7 @@ fun FullPlayerScreen(
                 onSeek = { playerManager.seekTo(it) }
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Playback Controls with loading indicator and debounced taps
             GlassPlayerControl(
@@ -499,7 +533,186 @@ fun FullPlayerScreen(
                 onToggleRepeat = { playerManager.toggleRepeat() }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Compact Utility Pill Row: Sleep Timer & Offline Audio Save
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val isTimerActive = sleepStopAfterTrack || sleepTimerRemainingMs != null
+                val timerLabel = when {
+                    sleepStopAfterTrack -> "Akhir lagu"
+                    sleepTimerRemainingMs != null -> {
+                        val totalSec = ((sleepTimerRemainingMs ?: 0L) / 1000L).coerceAtLeast(0L)
+                        val m = totalSec / 60L
+                        val s = totalSec % 60L
+                        "%d:%02d".format(m, s)
+                    }
+                    else -> "Sleep Timer"
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            brush = if (isTimerActive) glassConfig.toggleActiveBrush else glassConfig.cardBrush
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isTimerActive) glassConfig.accentSecondary else glassConfig.borderHighlight,
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                        .clickable { showSleepTimerDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Bedtime,
+                            contentDescription = "Sleep Timer",
+                            tint = if (isTimerActive) glassConfig.accentSecondary else glassConfig.textSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = timerLabel,
+                            style = GlassTypography.labelSmall,
+                            color = if (isTimerActive) glassConfig.accentSecondary else glassConfig.textSecondary
+                        )
+                    }
+                }
+
+                if (onToggleOfflineDownload != null && currentTrack != null) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(
+                                brush = if (isTrackDownloaded) glassConfig.toggleActiveBrush else glassConfig.cardBrush
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isTrackDownloaded) glassConfig.accentSecondary else glassConfig.borderHighlight,
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .clickable { currentTrack?.let(onToggleOfflineDownload) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (isTrackDownloading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(13.dp),
+                                    strokeWidth = 2.dp,
+                                    color = glassConfig.accentPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isTrackDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                                    contentDescription = "Offline Audio",
+                                    tint = if (isTrackDownloaded) glassConfig.accentSecondary else glassConfig.textSecondary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            Text(
+                                text = when {
+                                    isTrackDownloading -> "Mengunduh..."
+                                    isTrackDownloaded -> "Tersimpan"
+                                    else -> "Offline"
+                                },
+                                style = GlassTypography.labelSmall,
+                                color = if (isTrackDownloaded) glassConfig.accentSecondary else glassConfig.textSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
+        if (showSleepTimerDialog) {
+            val presetMinutes = listOf(10, 15, 30, 45, 60)
+            GlassDialog(onDismissRequest = { showSleepTimerDialog = false }) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Sleep Timer",
+                        style = GlassTypography.headlineMedium,
+                        color = glassConfig.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Hentikan pemutaran musik secara otomatis",
+                        style = GlassTypography.bodyMedium,
+                        color = glassConfig.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        presetMinutes.chunked(3).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowItems.forEach { mins ->
+                                    GlassChip(
+                                        text = "$mins mnt",
+                                        isSelected = false,
+                                        onClick = {
+                                            playerManager.setSleepTimer(mins)
+                                            showSleepTimerDialog = false
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (rowItems.size < 3) {
+                                    repeat(3 - rowItems.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+
+                        GlassChip(
+                            text = "Setelah lagu ini selesai",
+                            isSelected = sleepStopAfterTrack,
+                            onClick = {
+                                playerManager.setSleepAfterCurrentTrack(true)
+                                showSleepTimerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (sleepTimerRemainingMs != null || sleepStopAfterTrack) {
+                            GlassButton(
+                                text = "Matikan Timer",
+                                onClick = {
+                                    playerManager.cancelSleepTimer()
+                                    showSleepTimerDialog = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        GlassButton(
+                            text = "Tutup",
+                            isPrimary = true,
+                            onClick = { showSleepTimerDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
         }
 
         // Play Queue Modal Bottom Sheet

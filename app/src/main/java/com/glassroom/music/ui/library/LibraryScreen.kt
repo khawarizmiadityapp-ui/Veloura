@@ -111,6 +111,24 @@ fun LibraryScreen(
                 }
             }
 
+            "Offline" -> {
+                if (uiState.offlineTracks.isEmpty()) {
+                    EmptyLibraryState(
+                        title = "Belum ada lagu offline",
+                        subtitle = "Ketuk ikon titik tiga (⋮) pada lagu apa saja lalu pilih Simpan Offline."
+                    )
+                } else {
+                    TrackList(
+                        tracks = uiState.offlineTracks,
+                        currentPlayingTrack = currentPlayingTrack,
+                        isPlaying = isPlaying,
+                        onTrackClick = onTrackClick,
+                        onFavoriteClick = viewModel::toggleFavorite,
+                        onMoreClick = onTrackMoreClick
+                    )
+                }
+            }
+
             "Artists" -> {
                 val groupedByArtist = uiState.favoriteTracks
                     .filter { it.artist.isNotBlank() }

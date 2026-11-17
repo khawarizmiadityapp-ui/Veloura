@@ -15,6 +15,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import com.glassroom.music.data.local.OfflineAudioManager
 import com.glassroom.music.data.local.PreferencesManager
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.domain.model.AudioStreamException
@@ -44,7 +45,8 @@ class PlayerManager(
     private val context: Context,
     private val musicRepository: MusicRepository,
     private val playlistRepository: PlaylistRepository,
-    private val preferencesManager: PreferencesManager? = null
+    private val preferencesManager: PreferencesManager? = null,
+    private val offlineAudioManager: OfflineAudioManager? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -57,6 +59,7 @@ class PlayerManager(
     private var prewarmJob: Job? = null
     private var autoplayJob: Job? = null
     private var persistJob: Job? = null
+    private var sleepTimerJob: Job? = null
 
     init {
         try {
@@ -115,12 +118,17 @@ class PlayerManager(
 
         val baseDataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val resolvingDataSourceFactory = ResolvingDataSource.Factory(baseDataSourceFactory) { dataSpec ->
-            val streamUa = NetworkClient.getStreamUserAgent(dataSpec.uri.toString(), defaultUserAgent)
-            val headers = HashMap(dataSpec.httpRequestHeaders)
-            headers["User-Agent"] = streamUa
-            dataSpec.buildUpon()
-                .setHttpRequestHeaders(headers)
-                .build()
+            val uriStr = dataSpec.uri.toString()
+            if (uriStr.startsWith("http://") || uriStr.startsWith("https://")) {
+                val streamUa = NetworkClient.getStreamUserAgent(uriStr, defaultUserAgent)
+                val headers = HashMap(dataSpec.httpRequestHeaders)
+                headers["User-Agent"] = streamUa
+                dataSpec.buildUpon()
+                    .setHttpRequestHeaders(headers)
+                    .build()
+            } else {
+                dataSpec
+            }
         }
 
         val mediaSourceFactory =
@@ -152,6 +160,50 @@ class PlayerManager(
 
     private val _currentIndex = MutableStateFlow(0)
     val currentIndex: StateFlow<Int> = _currentIndex.asStateFlow()
+
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs.asStateFlow()
+
+    private val _sleepStopAfterCurrentTrack = MutableStateFlow(false)
+    val sleepStopAfterCurrentTrack: StateFlow<Boolean> = _sleepStopAfterCurrentTrack.asStateFlow()
+
+    fun setSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        _sleepStopAfterCurrentTrack.value = false
+        if (minutes <= 0) {
+            _sleepTimerRemainingMs.value = null
+            return
+        }
+        val totalMs = minutes * 60_000L
+        _sleepTimerRemainingMs.value = totalMs
+        sleepTimerJob = scope.launch {
+            var remaining = totalMs
+            while (isActive && remaining > 0L) {
+                delay(1000L)
+                remaining -= 1000L
+                _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0L)
+            }
+            if (isActive) {
+                _sleepTimerRemainingMs.value = null
+                if (exoPlayer.isPlaying) {
+                    exoPlayer.pause()
+                    _isPlaying.value = false
+                }
+            }
+        }
+    }
+
+    fun setSleepAfterCurrentTrack(enabled: Boolean) {
+        sleepTimerJob?.cancel()
+        _sleepTimerRemainingMs.value = null
+        _sleepStopAfterCurrentTrack.value = enabled
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        _sleepTimerRemainingMs.value = null
+        _sleepStopAfterCurrentTrack.value = false
+    }
 
     private val _isShuffle = MutableStateFlow(false)
     val isShuffle: StateFlow<Boolean> = _isShuffle.asStateFlow()
@@ -463,6 +515,15 @@ class PlayerManager(
             // Save to recently played in local database
             playlistRepository.addToRecentlyPlayed(track)
 
+            // Priority 0: Local offline audio file if user saved this track offline
+            val offlineUri = offlineAudioManager?.getOfflineUri(track.id)
+            if (!offlineUri.isNullOrBlank()) {
+                if (currentPlayToken != playToken) return@launch
+                prepareAndPlayStream(track, offlineUri, startPositionMs)
+                prewarmNextTrackIfGapless()
+                return@launch
+            }
+
             // Resolve direct stream URL via repository/backend
             val isDirectPlayable = track.streamUrl.isNotBlank() &&
                     track.streamUrl.startsWith("http") &&
@@ -704,6 +765,11 @@ class PlayerManager(
     }
 
     private fun handleTrackEnded() {
+        if (_sleepStopAfterCurrentTrack.value) {
+            _sleepStopAfterCurrentTrack.value = false
+            _isPlaying.value = false
+            return
+        }
         when (_repeatMode.value) {
             GlassRepeatMode.ONE -> {
                 exoPlayer.seekTo(0)
@@ -732,6 +798,7 @@ class PlayerManager(
         prewarmJob?.cancel()
         autoplayJob?.cancel()
         persistJob?.cancel()
+        sleepTimerJob?.cancel()
         exoPlayer.removeListener(playerListener)
         exoPlayer.release()
     }

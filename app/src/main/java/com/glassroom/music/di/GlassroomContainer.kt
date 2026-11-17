@@ -3,6 +3,7 @@ package com.glassroom.music.di
 import android.content.Context
 import com.glassroom.music.data.local.GlassroomDbHelper
 import com.glassroom.music.data.local.LocalDataSource
+import com.glassroom.music.data.local.OfflineAudioManager
 import com.glassroom.music.data.local.PreferencesManager
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.data.repository.MusicRepositoryImpl
@@ -18,6 +19,7 @@ class GlassroomContainer(context: Context) {
     val dbHelper = GlassroomDbHelper(context)
     val localDataSource = LocalDataSource(dbHelper)
     val preferencesManager = PreferencesManager(context)
+    val offlineAudioManager = OfflineAudioManager(context, localDataSource)
 
     val musicRepository: MusicRepository = MusicRepositoryImpl(localDataSource)
     val playlistRepository: PlaylistRepository = PlaylistRepositoryImpl(localDataSource)
@@ -26,7 +28,8 @@ class GlassroomContainer(context: Context) {
         context = context,
         musicRepository = musicRepository,
         playlistRepository = playlistRepository,
-        preferencesManager = preferencesManager
+        preferencesManager = preferencesManager,
+        offlineAudioManager = offlineAudioManager
     )
 
     init {

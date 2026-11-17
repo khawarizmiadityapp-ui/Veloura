@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -59,6 +61,9 @@ fun TrackOptionsSheet(
     existingPlaylistIds: Set<String>,
     isFavorite: Boolean,
     sourcePlaylistId: String? = null,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    onToggleOfflineDownload: (() -> Unit)? = null,
     onAddToPlaylist: (Playlist) -> Unit,
     onCreatePlaylistAndAdd: (name: String, description: String) -> Unit,
     onPlayNext: () -> Unit,
@@ -193,6 +198,26 @@ fun TrackOptionsSheet(
                                 onDismiss()
                             }
                         )
+                        if (onToggleOfflineDownload != null) {
+                            TrackOptionActionRow(
+                                icon = if (isDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                                title = when {
+                                    isDownloading -> "Sedang Mengunduh Audio..."
+                                    isDownloaded -> "Hapus Unduhan Offline"
+                                    else -> "Simpan Offline"
+                                },
+                                subtitle = when {
+                                    isDownloading -> "Menyimpan file audio untuk diputar tanpa internet"
+                                    isDownloaded -> "Lagu tersimpan di perangkat (putar kapan saja offline)"
+                                    else -> "Unduh audio agar bisa diputar tanpa kuota/sinyal"
+                                },
+                                iconTint = if (isDownloaded) glassConfig.accentSecondary else glassConfig.accentPrimary,
+                                onClick = {
+                                    onToggleOfflineDownload()
+                                    onDismiss()
+                                }
+                            )
+                        }
                         if (sourcePlaylistId != null && onRemoveFromPlaylist != null) {
                             TrackOptionActionRow(
                                 icon = Icons.Filled.DeleteOutline,

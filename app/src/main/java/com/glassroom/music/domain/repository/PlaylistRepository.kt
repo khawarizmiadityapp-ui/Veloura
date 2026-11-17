@@ -25,4 +25,5 @@ interface PlaylistRepository {
     // Recently played
     fun getRecentlyPlayedTracks(): Flow<List<Track>>
     suspend fun addToRecentlyPlayed(track: Track)
+    suspend fun getTracksByIds(trackIds: Set<String>): List<Track> = emptyList()
 }
