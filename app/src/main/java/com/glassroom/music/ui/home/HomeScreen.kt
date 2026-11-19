@@ -15,8 +15,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +38,7 @@ import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.theme.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -43,15 +48,31 @@ fun HomeScreen(
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
     onTrackMoreClick: (Track) -> Unit = {},
+    onNavigateToOffline: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val glassConfig = LocalGlassConfig.current
+    var isPullRefreshing by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 150.dp)
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading) {
+            isPullRefreshing = false
+        }
+    }
+
+    PullToRefreshBox(
+        isRefreshing = isPullRefreshing && uiState.isLoading,
+        onRefresh = {
+            isPullRefreshing = true
+            viewModel.loadRecommendations()
+        },
+        modifier = modifier.fillMaxSize()
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 150.dp)
+        ) {
         // Veloura Branded Header with Crystal Logo Badge
         item {
             Box(
@@ -136,6 +157,59 @@ fun HomeScreen(
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        // Network Error / Offline Shortcut Banner
+        if (uiState.errorMessage != null) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 6.dp)
+                ) {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CloudOff,
+                                    contentDescription = null,
+                                    tint = glassConfig.accentPrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Text(
+                                    text = uiState.errorMessage ?: "",
+                                    style = GlassTypography.bodyMedium,
+                                    color = glassConfig.textPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlassButton(
+                                    text = "Coba Lagi",
+                                    onClick = { viewModel.loadRecommendations() },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                GlassButton(
+                                    text = "Buka Lagu Offline",
+                                    isPrimary = true,
+                                    onClick = onNavigateToOffline,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
 
         // Recently Played Section (if any)
@@ -309,6 +383,7 @@ fun HomeScreen(
                     )
                 }
             }
+        }
         }
     }
 }

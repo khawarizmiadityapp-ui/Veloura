@@ -24,16 +24,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glassroom.music.data.local.OfflineAudioManager
 import com.glassroom.music.data.local.PreferencesManager
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.home.SectionHeader
 import com.glassroom.music.ui.theme.*
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
     preferencesManager: PreferencesManager,
+    offlineAudioManager: OfflineAudioManager? = null,
+    onOpenOfflineLibrary: () -> Unit = {},
+    onShowMessage: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -43,11 +49,16 @@ fun SettingsScreen(
     val isAutoplay by preferencesManager.autoplayFlow.collectAsState(initial = true)
 
     val glassIntensity by preferencesManager.glassIntensityFlow.collectAsState(initial = 0.75f)
+    val downloadedIds by (offlineAudioManager?.downloadedTrackIds ?: flowOf(emptySet<String>()))
+        .collectAsState(initial = emptySet())
+    val offlineStorageBytes by (offlineAudioManager?.offlineStorageBytes ?: flowOf(0L))
+        .collectAsState(initial = 0L)
 
     var editingUrl by remember(backendUrl) { mutableStateOf(backendUrl) }
     var connectionStatus by remember { mutableStateOf<String?>(null) }
     var isCheckingConnection by remember { mutableStateOf(false) }
     var showAdvancedServer by remember { mutableStateOf(false) }
+    var showClearOfflineDialog by remember { mutableStateOf(false) }
 
     val glassConfig = LocalGlassConfig.current
 
@@ -277,6 +288,68 @@ fun SettingsScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Offline Storage Management Section
+            if (offlineAudioManager != null) {
+                item {
+                    SectionHeader(title = "Penyimpanan Offline", modifier = Modifier.padding(horizontal = 0.dp))
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Storage,
+                                        contentDescription = null,
+                                        tint = glassConfig.accentPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "${downloadedIds.size} lagu tersimpan offline",
+                                            style = GlassTypography.titleMedium,
+                                            color = glassConfig.textPrimary
+                                        )
+                                        Text(
+                                            text = "Ruang terpakai: ${formatStorageSize(offlineStorageBytes)} (penyimpanan internal HP)",
+                                            style = GlassTypography.labelSmall,
+                                            color = glassConfig.textSecondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlassButton(
+                                    text = "Lihat Lagu Offline",
+                                    onClick = onOpenOfflineLibrary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (downloadedIds.isNotEmpty()) {
+                                    GlassButton(
+                                        text = "Hapus Semua",
+                                        onClick = { showClearOfflineDialog = true },
+                                        modifier = Modifier.weight(0.85f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
 
             // Backend Server Configuration (Clean summary + collapsible developer options)
@@ -604,6 +677,57 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showClearOfflineDialog && offlineAudioManager != null) {
+        GlassDialog(onDismissRequest = { showClearOfflineDialog = false }) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Hapus Semua Unduhan Offline?",
+                    style = GlassTypography.headlineMedium,
+                    color = glassConfig.textPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Sebanyak ${downloadedIds.size} file audio (${formatStorageSize(offlineStorageBytes)}) akan dihapus dari penyimpanan HP.",
+                    style = GlassTypography.bodyMedium,
+                    color = glassConfig.textSecondary
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    GlassButton(
+                        text = "Batal",
+                        onClick = { showClearOfflineDialog = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    GlassButton(
+                        text = "Hapus Semua",
+                        isPrimary = true,
+                        onClick = {
+                            showClearOfflineDialog = false
+                            coroutineScope.launch {
+                                val deleted = offlineAudioManager.deleteAllOfflineTracks()
+                                onShowMessage?.invoke("$deleted file offline dihapus")
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatStorageSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 KB"
+    val kb = bytes / 1024.0
+    if (kb < 1024.0) return String.format(Locale.US, "%.0f KB", kb)
+    val mb = kb / 1024.0
+    if (mb < 1024.0) return String.format(Locale.US, "%.1f MB", mb)
+    val gb = mb / 1024.0
+    return String.format(Locale.US, "%.2f GB", gb)
 }
 
 @Composable

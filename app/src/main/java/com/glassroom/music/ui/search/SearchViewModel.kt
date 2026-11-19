@@ -2,6 +2,7 @@ package com.glassroom.music.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.glassroom.music.data.local.PreferencesManager
 import com.glassroom.music.domain.model.Playlist
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.domain.repository.MusicRepository
@@ -17,6 +18,7 @@ data class SearchUiState(
     val isLoading: Boolean = false,
     val results: List<Track> = emptyList(),
     val matchedPlaylists: List<Playlist> = emptyList(),
+    val searchHistory: List<String> = emptyList(),
     val selectedArtist: String? = null,
     val selectedAlbum: String? = null,
     val errorMessage: String? = null
@@ -25,7 +27,8 @@ data class SearchUiState(
 @OptIn(FlowPreview::class)
 class SearchViewModel(
     private val musicRepository: MusicRepository,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val preferencesManager: PreferencesManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -62,6 +65,11 @@ class SearchViewModel(
             }
         }
         viewModelScope.launch {
+            preferencesManager?.searchHistoryFlow?.collect { history ->
+                _uiState.update { it.copy(searchHistory = history) }
+            }
+        }
+        viewModelScope.launch {
             searchQueryFlow
                 .debounce(350)
                 .distinctUntilChanged()
@@ -75,7 +83,8 @@ class SearchViewModel(
                                 matchedPlaylists = emptyList(),
                                 selectedArtist = null,
                                 selectedAlbum = null,
-                                isLoading = false
+                                isLoading = false,
+                                errorMessage = null
                             )
                         }
                     }
@@ -89,10 +98,55 @@ class SearchViewModel(
                 query = query,
                 selectedArtist = null,
                 selectedAlbum = null,
+                errorMessage = null,
                 matchedPlaylists = filterSavedPlaylists(savedPlaylists, query)
             )
         }
         searchQueryFlow.value = query
+    }
+
+    fun onSearchSubmit() {
+        val currentQ = _uiState.value.query.trim()
+        if (currentQ.isBlank()) return
+        recordCurrentSearchQuery()
+        executeSearch(currentQ, _uiState.value.selectedCategory)
+    }
+
+    fun selectHistoryOrSuggestion(term: String) {
+        onQueryChange(term)
+        recordQuery(term)
+        executeSearch(term, _uiState.value.selectedCategory)
+    }
+
+    fun retrySearch() {
+        val currentQ = _uiState.value.query.trim()
+        if (currentQ.isNotBlank()) {
+            executeSearch(currentQ, _uiState.value.selectedCategory)
+        }
+    }
+
+    fun recordCurrentSearchQuery() {
+        recordQuery(_uiState.value.query)
+    }
+
+    private fun recordQuery(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return
+        viewModelScope.launch {
+            preferencesManager?.addSearchHistory(trimmed)
+        }
+    }
+
+    fun removeHistoryItem(query: String) {
+        viewModelScope.launch {
+            preferencesManager?.removeSearchHistory(query)
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            preferencesManager?.clearSearchHistory()
+        }
     }
 
     fun onCategorySelect(category: String) {

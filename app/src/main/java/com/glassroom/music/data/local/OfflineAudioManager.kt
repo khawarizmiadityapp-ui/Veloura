@@ -4,17 +4,29 @@ import android.content.Context
 import com.glassroom.music.data.remote.NetworkClient
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.domain.repository.MusicRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+
+data class BatchDownloadProgress(
+    val playlistId: String,
+    val completed: Int,
+    val total: Int,
+    val currentTitle: String
+)
 
 class OfflineAudioManager(
     context: Context,
@@ -23,6 +35,9 @@ class OfflineAudioManager(
     private val offlineDir = File(context.filesDir, "offline_audio").apply {
         if (!exists()) mkdirs()
     }
+
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var batchDownloadJob: Job? = null
 
     private val downloadHttpClient by lazy {
         OkHttpClient.Builder()
@@ -39,6 +54,12 @@ class OfflineAudioManager(
     private val _downloadingTrackIds = MutableStateFlow<Set<String>>(emptySet())
     val downloadingTrackIds: StateFlow<Set<String>> = _downloadingTrackIds.asStateFlow()
 
+    private val _offlineStorageBytes = MutableStateFlow(computeStorageBytes())
+    val offlineStorageBytes: StateFlow<Long> = _offlineStorageBytes.asStateFlow()
+
+    private val _batchProgress = MutableStateFlow<BatchDownloadProgress?>(null)
+    val batchProgress: StateFlow<BatchDownloadProgress?> = _batchProgress.asStateFlow()
+
     private fun safeFileName(trackId: String): String {
         return trackId.replace(Regex("""[^a-zA-Z0-9_-]"""), "_")
     }
@@ -47,16 +68,25 @@ class OfflineAudioManager(
         return File(offlineDir, "${safeFileName(trackId)}.m4a")
     }
 
+    private fun scanOfflineFiles(): List<File> {
+        val files = offlineDir.listFiles() ?: return emptyList()
+        return files.filter { it.isFile && it.name.endsWith(".m4a") && it.length() > 1024L }
+    }
+
     private fun scanDownloadedIds(): Set<String> {
-        val files = offlineDir.listFiles() ?: return emptySet()
-        return files
-            .filter { it.isFile && it.name.endsWith(".m4a") && it.length() > 1024L }
+        return scanOfflineFiles()
             .map { it.name.removeSuffix(".m4a") }
             .toSet()
     }
 
-    private fun refreshDownloadedIds() {
-        _downloadedTrackIds.value = scanDownloadedIds()
+    private fun computeStorageBytes(): Long {
+        return scanOfflineFiles().sumOf { it.length() }
+    }
+
+    private fun refreshOfflineState() {
+        val validFiles = scanOfflineFiles()
+        _downloadedTrackIds.value = validFiles.map { it.name.removeSuffix(".m4a") }.toSet()
+        _offlineStorageBytes.value = validFiles.sumOf { it.length() }
     }
 
     fun isDownloaded(trackId: String): Boolean {
@@ -79,7 +109,7 @@ class OfflineAudioManager(
     ): Result<Unit> = withContext(Dispatchers.IO) {
         if (isDownloaded(track.id)) {
             localDataSource.upsertTrack(track)
-            refreshDownloadedIds()
+            refreshOfflineState()
             return@withContext Result.success(Unit)
         }
 
@@ -142,7 +172,7 @@ class OfflineAudioManager(
                 tmpFile.delete()
             }
 
-            refreshDownloadedIds()
+            refreshOfflineState()
             Result.success(Unit)
         } catch (e: Exception) {
             tmpFile.delete()
@@ -150,6 +180,40 @@ class OfflineAudioManager(
         } finally {
             _downloadingTrackIds.update { it - track.id }
         }
+    }
+
+    fun startBatchDownload(
+        playlistId: String,
+        tracks: List<Track>,
+        musicRepository: MusicRepository
+    ) {
+        val pending = tracks.filterNot { isDownloaded(it.id) }
+        if (pending.isEmpty()) return
+
+        batchDownloadJob?.cancel()
+        batchDownloadJob = managerScope.launch {
+            try {
+                pending.forEachIndexed { idx, track ->
+                    ensureActive()
+                    _batchProgress.value = BatchDownloadProgress(
+                        playlistId = playlistId,
+                        completed = idx,
+                        total = pending.size,
+                        currentTitle = track.title
+                    )
+                    downloadTrack(track, musicRepository)
+                }
+            } finally {
+                _batchProgress.value = null
+                refreshOfflineState()
+            }
+        }
+    }
+
+    fun cancelBatchDownload() {
+        batchDownloadJob?.cancel()
+        batchDownloadJob = null
+        _batchProgress.value = null
     }
 
     suspend fun deleteOfflineTrack(trackId: String) = withContext(Dispatchers.IO) {
@@ -161,6 +225,22 @@ class OfflineAudioManager(
         if (tmpFile.exists()) {
             tmpFile.delete()
         }
-        refreshDownloadedIds()
+        refreshOfflineState()
+    }
+
+    suspend fun deleteAllOfflineTracks(): Int = withContext(Dispatchers.IO) {
+        cancelBatchDownload()
+        val files = offlineDir.listFiles() ?: return@withContext 0
+        var removedCount = 0
+        files.forEach { file ->
+            if (file.isFile) {
+                val isAudio = file.name.endsWith(".m4a") && file.length() > 1024L
+                if (file.delete() && isAudio) {
+                    removedCount++
+                }
+            }
+        }
+        refreshOfflineState()
+        removedCount
     }
 }

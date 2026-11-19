@@ -28,6 +28,8 @@ import com.glassroom.music.GlassroomApplication
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.components.GlassBottomBar
 import com.glassroom.music.ui.components.GlassMiniPlayer
+import com.glassroom.music.ui.components.LocalDownloadedTrackIds
+import com.glassroom.music.ui.components.LocalDownloadingTrackIds
 import com.glassroom.music.ui.components.TrackOptionsSheet
 import com.glassroom.music.ui.home.HomeScreen
 import com.glassroom.music.ui.home.HomeViewModel
@@ -83,6 +85,16 @@ fun GlassroomApp(
     var selectedTrackOptions by remember { mutableStateOf<Pair<Track, String?>?>(null) }
     var existingPlaylistIdsForTrack by remember { mutableStateOf<Set<String>>(emptySet()) }
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    var pendingLibraryTab by remember { mutableStateOf<String?>(null) }
+
+    fun navigateToOfflineLibrary() {
+        pendingLibraryTab = "Offline"
+        navController.navigate(Screen.Library.route) {
+            popUpTo(Screen.Home.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     fun handleToggleOfflineDownload(track: Track) {
         if (track.id in downloadingIds) {
@@ -121,9 +133,13 @@ fun GlassroomApp(
         }
     }
 
-    SharedTransitionLayout(
-        modifier = modifier.fillMaxSize()
+    CompositionLocalProvider(
+        LocalDownloadedTrackIds provides downloadedIds,
+        LocalDownloadingTrackIds provides downloadingIds
     ) {
+        SharedTransitionLayout(
+            modifier = modifier.fillMaxSize()
+        ) {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -183,13 +199,18 @@ fun GlassroomApp(
                         isPlaying = isPlaying,
                         onTrackMoreClick = { track ->
                             selectedTrackOptions = track to null
-                        }
+                        },
+                        onNavigateToOffline = ::navigateToOfflineLibrary
                     )
                 }
 
                 composable(Screen.Search.route) {
                     val searchViewModel: SearchViewModel = viewModel {
-                        SearchViewModel(app.container.musicRepository, app.container.playlistRepository)
+                        SearchViewModel(
+                            app.container.musicRepository,
+                            app.container.playlistRepository,
+                            app.container.preferencesManager
+                        )
                     }
                     SearchScreen(
                         viewModel = searchViewModel,
@@ -226,7 +247,9 @@ fun GlassroomApp(
                         isPlaying = isPlaying,
                         onTrackMoreClick = { track ->
                             selectedTrackOptions = track to null
-                        }
+                        },
+                        requestedTab = pendingLibraryTab,
+                        onRequestedTabConsumed = { pendingLibraryTab = null }
                     )
                 }
 
@@ -263,6 +286,7 @@ fun GlassroomApp(
                             selectedTrackOptions = track to playlistId
                         },
                         musicRepository = app.container.musicRepository,
+                        offlineAudioManager = app.container.offlineAudioManager,
                         onShowMessage = { msg ->
                             actionFeedbackMessage = msg
                         }
@@ -271,7 +295,12 @@ fun GlassroomApp(
 
                 composable(Screen.Settings.route) {
                     SettingsScreen(
-                        preferencesManager = app.container.preferencesManager
+                        preferencesManager = app.container.preferencesManager,
+                        offlineAudioManager = app.container.offlineAudioManager,
+                        onOpenOfflineLibrary = ::navigateToOfflineLibrary,
+                        onShowMessage = { msg ->
+                            actionFeedbackMessage = msg
+                        }
                     )
                 }
             }
@@ -487,6 +516,7 @@ fun GlassroomApp(
                     onDismiss = { selectedTrackOptions = null }
                 )
             }
+        }
         }
     }
 }

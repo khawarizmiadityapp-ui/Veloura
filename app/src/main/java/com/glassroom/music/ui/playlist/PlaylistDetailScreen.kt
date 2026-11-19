@@ -14,6 +14,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.glassroom.music.data.local.OfflineAudioManager
 import com.glassroom.music.domain.model.ImportStatus
 import com.glassroom.music.domain.model.SpotifyImportState
 import com.glassroom.music.domain.model.Track
@@ -60,12 +63,18 @@ fun PlaylistDetailScreen(
     isPlaying: Boolean,
     onTrackMoreClick: ((Track) -> Unit)? = null,
     musicRepository: MusicRepository? = null,
+    offlineAudioManager: OfflineAudioManager? = null,
     onShowMessage: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val playlistWithTracks by playlistRepository.getPlaylistWithTracks(playlistId).collectAsState(initial = null)
     val coroutineScope = rememberCoroutineScope()
     val glassConfig = LocalGlassConfig.current
+
+    val downloadedIds by (offlineAudioManager?.downloadedTrackIds
+        ?: kotlinx.coroutines.flow.flowOf(emptySet<String>())).collectAsState(initial = emptySet())
+    val batchProgress by (offlineAudioManager?.batchProgress
+        ?: kotlinx.coroutines.flow.flowOf(null)).collectAsState(initial = null)
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -309,6 +318,105 @@ fun PlaylistDetailScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+
+                        // Batch Offline Download Bar
+                        if (offlineAudioManager != null && musicRepository != null && tracks.isNotEmpty()) {
+                            val offlineCount = remember(tracks, downloadedIds) {
+                                tracks.count { it.id in downloadedIds }
+                            }
+                            val remainingCount = (tracks.size - offlineCount).coerceAtLeast(0)
+                            val activeBatch = batchProgress?.takeIf { it.playlistId == playlistId }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            if (activeBatch != null) {
+                                GlassCard(
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = 1.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Mengunduh ${activeBatch.completed}/${activeBatch.total}: ${activeBatch.currentTitle}",
+                                                style = GlassTypography.labelSmall,
+                                                color = glassConfig.textPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Batal",
+                                                style = GlassTypography.labelSmall,
+                                                color = Color(0xFFEF4444),
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable { offlineAudioManager.cancelBatchDownload() }
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LinearProgressIndicator(
+                                            progress = {
+                                                activeBatch.completed.toFloat() / activeBatch.total.coerceAtLeast(1).toFloat()
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(5.dp)
+                                                .clip(CircleShape),
+                                            color = glassConfig.accentPrimary,
+                                            trackColor = glassConfig.inactiveTrackColor
+                                        )
+                                    }
+                                }
+                            } else if (remainingCount == 0) {
+                                GlassCard(
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = 1.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.DownloadDone,
+                                            contentDescription = null,
+                                            tint = glassConfig.accentSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Semua ${tracks.size} lagu tersimpan offline",
+                                            style = GlassTypography.labelLarge,
+                                            color = glassConfig.accentSecondary
+                                        )
+                                    }
+                                }
+                            } else {
+                                GlassButton(
+                                    text = if (offlineCount > 0) {
+                                        "Unduh Sisa Offline ($remainingCount lagu)"
+                                    } else {
+                                        "Unduh Semua Offline (${tracks.size} lagu)"
+                                    },
+                                    icon = Icons.Filled.Download,
+                                    isPrimary = false,
+                                    onClick = {
+                                        offlineAudioManager.startBatchDownload(playlistId, tracks, musicRepository)
+                                        onShowMessage?.invoke("Mulai mengunduh $remainingCount lagu di latar belakang")
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
 
                         // Spotify Sync Inline Progress

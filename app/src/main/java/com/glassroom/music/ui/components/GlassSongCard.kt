@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -39,16 +41,23 @@ import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.theme.*
 
+val LocalDownloadedTrackIds = compositionLocalOf<Set<String>> { emptySet() }
+val LocalDownloadingTrackIds = compositionLocalOf<Set<String>> { emptySet() }
+
 @Composable
 fun GlassSongCard(
     track: Track,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
+    isOfflineDownloaded: Boolean? = null,
+    isOfflineDownloading: Boolean? = null,
     onFavoriteClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null
 ) {
     val glassConfig = LocalGlassConfig.current
+    val resolvedDownloaded = isOfflineDownloaded ?: (track.id in LocalDownloadedTrackIds.current)
+    val resolvedDownloading = isOfflineDownloading ?: (track.id in LocalDownloadingTrackIds.current)
 
     // Tactile spring press feedback
     val interactionSource = remember { MutableInteractionSource() }
@@ -165,13 +174,33 @@ fun GlassSongCard(
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = track.artist,
-                    style = GlassTypography.bodyMedium,
-                    color = glassConfig.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (resolvedDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(11.dp),
+                            strokeWidth = 1.6.dp,
+                            color = glassConfig.accentPrimary
+                        )
+                    } else if (resolvedDownloaded) {
+                        Icon(
+                            imageVector = Icons.Filled.DownloadDone,
+                            contentDescription = "Tersimpan Offline",
+                            tint = glassConfig.accentSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    Text(
+                        text = track.artist,
+                        style = GlassTypography.bodyMedium,
+                        color = glassConfig.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
             }
 
             // Duration

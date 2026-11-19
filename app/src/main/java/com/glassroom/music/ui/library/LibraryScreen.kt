@@ -44,11 +44,20 @@ fun LibraryScreen(
     currentPlayingTrack: Track?,
     isPlaying: Boolean,
     onTrackMoreClick: (Track) -> Unit = {},
+    requestedTab: String? = null,
+    onRequestedTabConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val glassConfig = LocalGlassConfig.current
     var selectedArtist by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(requestedTab) {
+        if (requestedTab != null) {
+            viewModel.selectTab(requestedTab)
+            onRequestedTabConsumed()
+        }
+    }
 
     LaunchedEffect(uiState.selectedTab) {
         if (uiState.selectedTab != "Artis") {

@@ -2,6 +2,7 @@ package com.glassroom.music.ui.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -13,8 +14,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -25,6 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -46,6 +52,12 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val glassConfig = LocalGlassConfig.current
+    val focusManager = LocalFocusManager.current
+    val handleTrackClick: (Track, List<Track>) -> Unit = { track, queue ->
+        viewModel.recordCurrentSearchQuery()
+        focusManager.clearFocus()
+        onTrackClick(track, queue)
+    }
 
     Column(
         modifier = modifier
@@ -61,6 +73,10 @@ fun SearchScreen(
             GlassSearchBar(
                 query = uiState.query,
                 onQueryChange = viewModel::onQueryChange,
+                onSearch = {
+                    focusManager.clearFocus()
+                    viewModel.onSearchSubmit()
+                },
                 placeholder = "Cari lagu, artis, album, atau playlist..."
             )
         }
@@ -96,6 +112,13 @@ fun SearchScreen(
                 }
             }
 
+            !hasAnyResults && uiState.errorMessage != null && uiState.query.isNotBlank() -> {
+                SearchErrorState(
+                    message = uiState.errorMessage ?: "Gagal memuat hasil pencarian",
+                    onRetry = viewModel::retrySearch
+                )
+            }
+
             !hasAnyResults && uiState.query.isNotBlank() -> {
                 SearchEmptyState(
                     title = "Tidak ada hasil yang cocok",
@@ -104,9 +127,14 @@ fun SearchScreen(
             }
 
             !hasAnyResults -> {
-                SearchEmptyState(
-                    title = "Cari apa saja",
-                    subtitle = "Jelajahi jutaan lagu, artis, album, dan playlist."
+                SearchIdleDiscoveryContent(
+                    searchHistory = uiState.searchHistory,
+                    onSelectTerm = { term ->
+                        focusManager.clearFocus()
+                        viewModel.selectHistoryOrSuggestion(term)
+                    },
+                    onRemoveHistory = viewModel::removeHistoryItem,
+                    onClearHistory = viewModel::clearHistory
                 )
             }
 
@@ -134,7 +162,7 @@ fun SearchScreen(
                         keyPrefix = "search_art_track",
                         currentPlayingTrack = currentPlayingTrack,
                         isPlaying = isPlaying,
-                        onTrackClick = onTrackClick,
+                        onTrackClick = handleTrackClick,
                         onFavoriteClick = viewModel::toggleFavorite,
                         onMoreClick = onTrackMoreClick
                     )
@@ -189,7 +217,7 @@ fun SearchScreen(
                         keyPrefix = "search_alb_track",
                         currentPlayingTrack = currentPlayingTrack,
                         isPlaying = isPlaying,
-                        onTrackClick = onTrackClick,
+                        onTrackClick = handleTrackClick,
                         onFavoriteClick = viewModel::toggleFavorite,
                         onMoreClick = onTrackMoreClick
                     )
@@ -217,7 +245,7 @@ fun SearchScreen(
                                 circularThumb = false,
                                 onClick = {
                                     if (tracks.size == 1) {
-                                        onTrackClick(first, uiState.results)
+                                        handleTrackClick(first, uiState.results)
                                     } else {
                                         viewModel.selectAlbum(albumTitle)
                                     }
@@ -274,7 +302,7 @@ fun SearchScreen(
                             GlassSongCard(
                                 track = track,
                                 isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
-                                onClick = { onTrackClick(track, uiState.results) },
+                                onClick = { handleTrackClick(track, uiState.results) },
                                 onFavoriteClick = { viewModel.toggleFavorite(track) },
                                 onMoreClick = { onTrackMoreClick(track) }
                             )
@@ -289,7 +317,7 @@ fun SearchScreen(
                     keyPrefix = "search",
                     currentPlayingTrack = currentPlayingTrack,
                     isPlaying = isPlaying,
-                    onTrackClick = onTrackClick,
+                    onTrackClick = handleTrackClick,
                     onFavoriteClick = viewModel::toggleFavorite,
                     onMoreClick = onTrackMoreClick
                 )
@@ -442,6 +470,207 @@ private fun GroupedSearchCard(
 }
 
 @Composable
+private fun SearchIdleDiscoveryContent(
+    searchHistory: List<String>,
+    onSelectTerm: (String) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onClearHistory: () -> Unit
+) {
+    val glassConfig = LocalGlassConfig.current
+    val quickSuggestions = listOf("Pop Indonesia", "Indie Senja", "Lo-Fi Chill", "Top Hits", "Acoustic")
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 150.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Text(
+                text = "Saran Cepat",
+                style = GlassTypography.titleMedium,
+                color = glassConfig.textSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(quickSuggestions) { term ->
+                    GlassChip(
+                        text = term,
+                        isSelected = false,
+                        onClick = { onSelectTerm(term) }
+                    )
+                }
+            }
+        }
+
+        if (searchHistory.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pencarian Terakhir",
+                        style = GlassTypography.titleMedium,
+                        color = glassConfig.textSecondary
+                    )
+                    Text(
+                        text = "Hapus Semua",
+                        style = GlassTypography.labelSmall,
+                        color = glassConfig.accentPrimary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onClearHistory)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            itemsIndexed(
+                items = searchHistory,
+                key = { index, q -> "search_hist_${q}_$index" }
+            ) { _, query ->
+                GlassCard(
+                    onClick = { onSelectTerm(query) },
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = null,
+                            tint = glassConfig.textTertiary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = query,
+                            style = GlassTypography.bodyLarge,
+                            color = glassConfig.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Hapus riwayat",
+                            tint = glassConfig.textTertiary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .clickable { onRemoveHistory(query) }
+                                .padding(2.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 48.dp, start = 16.dp, end = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(68.dp)
+                                .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
+                                .clip(CircleShape)
+                                .background(brush = glassConfig.cardBrush)
+                                .border(1.dp, glassConfig.borderBrush, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                                tint = glassConfig.textTertiary,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Cari apa saja",
+                            style = GlassTypography.headlineMedium,
+                            color = glassConfig.textPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Jelajahi jutaan lagu, artis, album, atau ketuk saran cepat di atas.",
+                            style = GlassTypography.bodyMedium,
+                            color = glassConfig.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchErrorState(
+    message: String,
+    onRetry: () -> Unit
+) {
+    val glassConfig = LocalGlassConfig.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .shadow(6.dp, CircleShape, ambientColor = glassConfig.shadowAmbient)
+                    .clip(CircleShape)
+                    .background(brush = glassConfig.cardBrush)
+                    .border(1.dp, glassConfig.borderBrush, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.WifiOff,
+                    contentDescription = null,
+                    tint = glassConfig.accentPrimary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Pencarian terganggu",
+                style = GlassTypography.headlineMedium,
+                color = glassConfig.textPrimary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = message,
+                style = GlassTypography.bodyMedium,
+                color = glassConfig.textSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            GlassButton(
+                text = "Coba Lagi",
+                isPrimary = true,
+                onClick = onRetry
+            )
+        }
+    }
+}
+
+@Composable
 private fun SearchEmptyState(title: String, subtitle: String) {
     val glassConfig = LocalGlassConfig.current
     Box(
@@ -471,13 +700,15 @@ private fun SearchEmptyState(title: String, subtitle: String) {
             Text(
                 text = title,
                 style = GlassTypography.headlineMedium,
-                color = glassConfig.textPrimary
+                color = glassConfig.textPrimary,
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = subtitle,
                 style = GlassTypography.bodyMedium,
-                color = glassConfig.textSecondary
+                color = glassConfig.textSecondary,
+                textAlign = TextAlign.Center
             )
         }
     }

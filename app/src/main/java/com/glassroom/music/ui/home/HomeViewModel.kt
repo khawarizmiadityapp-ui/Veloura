@@ -13,6 +13,7 @@ import java.util.Calendar
 data class HomeUiState(
     val greeting: String = "Selamat malam",
     val isLoading: Boolean = true,
+    val errorMessage: String? = null,
     val popularSongs: List<Track> = emptyList(),
     val madeForYou: List<Track> = emptyList(),
     val recentlyPlayed: List<Track> = emptyList(),
@@ -73,7 +74,7 @@ class HomeViewModel(
 
     fun loadRecommendations() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = musicRepository.getRecommendations()
             if (result.isSuccess) {
                 val data = result.getOrNull() ?: emptyMap()
@@ -81,13 +82,19 @@ class HomeViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
+                        errorMessage = null,
                         popularSongs = applyFavorites(data["popular"] ?: emptyList(), favIds),
                         madeForYou = applyFavorites(data["madeForYou"] ?: emptyList(), favIds),
                         trending = applyFavorites(data["trending"] ?: emptyList(), favIds)
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Gagal memuat rekomendasi beranda. Periksa koneksi internetmu."
+                    )
+                }
             }
         }
     }

@@ -38,6 +38,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_LAST_QUEUE_JSON = stringPreferencesKey("last_playback_queue_json")
         val KEY_LAST_INDEX = intPreferencesKey("last_playback_index")
         val KEY_LAST_POSITION_MS = longPreferencesKey("last_playback_position_ms")
+        val KEY_SEARCH_HISTORY_JSON = stringPreferencesKey("search_history_json")
 
         private val LEGACY_DEV_HOSTS = listOf(
             "veloura-lilac-sigma.vercel.app",
@@ -177,6 +178,48 @@ class PreferencesManager(private val context: Context) {
             PlaybackSessionSnapshot(queue = queue, currentIndex = idx, positionMs = pos)
         } catch (_: Exception) {
             null
+        }
+    }
+
+    val searchHistoryFlow: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        parseSearchHistoryJson(prefs[KEY_SEARCH_HISTORY_JSON])
+    }
+
+    suspend fun addSearchHistory(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return
+        context.dataStore.edit { prefs ->
+            val current = parseSearchHistoryJson(prefs[KEY_SEARCH_HISTORY_JSON])
+            val updated = (listOf(trimmed) + current.filterNot { it.equals(trimmed, ignoreCase = true) })
+                .take(10)
+            prefs[KEY_SEARCH_HISTORY_JSON] = Gson().toJson(updated)
+        }
+    }
+
+    suspend fun removeSearchHistory(query: String) {
+        context.dataStore.edit { prefs ->
+            val current = parseSearchHistoryJson(prefs[KEY_SEARCH_HISTORY_JSON])
+            val updated = current.filterNot { it.equals(query, ignoreCase = true) }
+            prefs[KEY_SEARCH_HISTORY_JSON] = Gson().toJson(updated)
+        }
+    }
+
+    suspend fun clearSearchHistory() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_SEARCH_HISTORY_JSON)
+        }
+    }
+
+    private fun parseSearchHistoryJson(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val listType = object : TypeToken<List<String>>() {}.type
+            Gson().fromJson<List<String>>(json, listType)
+                ?.filter { it.isNotBlank() }
+                ?.take(10)
+                ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 }
