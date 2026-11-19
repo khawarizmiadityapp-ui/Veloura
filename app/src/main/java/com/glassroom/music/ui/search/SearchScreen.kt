@@ -48,11 +48,22 @@ fun SearchScreen(
     isPlaying: Boolean,
     onTrackMoreClick: (Track) -> Unit = {},
     onPlaylistClick: (Playlist) -> Unit = {},
+    requestedQuery: String? = null,
+    onRequestedQueryConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val glassConfig = LocalGlassConfig.current
     val focusManager = LocalFocusManager.current
+
+    LaunchedEffect(requestedQuery) {
+        if (!requestedQuery.isNullOrBlank()) {
+            focusManager.clearFocus()
+            viewModel.selectHistoryOrSuggestion(requestedQuery)
+            onRequestedQueryConsumed()
+        }
+    }
+
     val handleTrackClick: (Track, List<Track>) -> Unit = { track, queue ->
         viewModel.recordCurrentSearchQuery()
         focusManager.clearFocus()

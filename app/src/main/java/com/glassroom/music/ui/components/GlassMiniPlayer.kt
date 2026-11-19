@@ -46,8 +46,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
@@ -62,6 +64,7 @@ fun GlassMiniPlayer(
     durationMs: Long,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    onPrevious: () -> Unit = {},
     onClick: () -> Unit,
     onSwipeUp: () -> Unit,
     modifier: Modifier = Modifier,
@@ -116,10 +119,28 @@ fun GlassMiniPlayer(
         }
     }
 
+    val safeOnPrevious = {
+        val now = System.currentTimeMillis()
+        if (now - lastTapTime > debounceMs) {
+            lastTapTime = now
+            onPrevious()
+        }
+    }
+
     val draggableState = rememberDraggableState { delta ->
         if (delta < -12) { // Swiped up with gentle threshold
             safeOnSwipeUp()
         }
+    }
+
+    var horizontalDragX by remember { mutableFloatStateOf(0f) }
+    val animatedHorizontalOffset by animateFloatAsState(
+        targetValue = horizontalDragX * 0.55f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 420f),
+        label = "mini_swipe_x"
+    )
+    val horizontalDraggableState = rememberDraggableState { delta ->
+        horizontalDragX = (horizontalDragX + delta).coerceIn(-120f, 120f)
     }
 
     val glassConfig = LocalGlassConfig.current
@@ -186,6 +207,18 @@ fun GlassMiniPlayer(
                 state = draggableState,
                 orientation = Orientation.Vertical
             )
+            .draggable(
+                state = horizontalDraggableState,
+                orientation = Orientation.Horizontal,
+                onDragStopped = {
+                    if (horizontalDragX <= -55f) {
+                        safeOnNext()
+                    } else if (horizontalDragX >= 55f) {
+                        safeOnPrevious()
+                    }
+                    horizontalDragX = 0f
+                }
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -197,6 +230,7 @@ fun GlassMiniPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .offset { IntOffset(animatedHorizontalOffset.roundToInt(), 0) }
                     .padding(horizontal = 12.dp, vertical = 9.dp)
             ) {
                 // Artwork Container with Shared Element and Fallback Placeholder

@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassroom.music.domain.model.Lyrics
@@ -111,14 +112,15 @@ fun GlassLyricsView(
     currentPositionMs: Long,
     onSeek: (Long) -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerHeight: Dp = 350.dp
 ) {
     val glassConfig = LocalGlassConfig.current
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(350.dp)
+            .height(containerHeight)
             .shadow(
                 elevation = if (glassConfig.isPaper) 10.dp else 24.dp,
                 shape = RoundedCornerShape(32.dp),

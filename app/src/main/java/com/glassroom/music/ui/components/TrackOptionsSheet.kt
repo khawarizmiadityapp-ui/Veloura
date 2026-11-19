@@ -1,5 +1,7 @@
 package com.glassroom.music.ui.components
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +50,30 @@ import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.theme.GlassTypography
 import com.glassroom.music.ui.theme.LocalGlassConfig
 
+fun shareTrack(context: Context, track: Track) {
+    val shareLink = when {
+        !track.id.startsWith("sp_") && track.id.length == 11 -> "https://youtu.be/${track.id}"
+        track.streamUrl.startsWith("http") -> track.streamUrl
+        else -> ""
+    }
+    val text = buildString {
+        append("Dengarkan \"${track.title}\"")
+        if (track.artist.isNotBlank()) {
+            append(" oleh ${track.artist}")
+        }
+        append(" di Veloura")
+        if (shareLink.isNotBlank()) {
+            append("\n$shareLink")
+        }
+    }
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "${track.title} — ${track.artist}")
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(sendIntent, "Bagikan Lagu"))
+}
+
 private enum class TrackOptionsStep {
     MAIN_MENU,
     PICK_PLAYLIST,
@@ -64,6 +91,7 @@ fun TrackOptionsSheet(
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
     onToggleOfflineDownload: (() -> Unit)? = null,
+    onShareTrack: (() -> Unit)? = null,
     onAddToPlaylist: (Playlist) -> Unit,
     onCreatePlaylistAndAdd: (name: String, description: String) -> Unit,
     onPlayNext: () -> Unit,
@@ -214,6 +242,18 @@ fun TrackOptionsSheet(
                                 iconTint = if (isDownloaded) glassConfig.accentSecondary else glassConfig.accentPrimary,
                                 onClick = {
                                     onToggleOfflineDownload()
+                                    onDismiss()
+                                }
+                            )
+                        }
+                        if (onShareTrack != null) {
+                            TrackOptionActionRow(
+                                icon = Icons.Filled.Share,
+                                title = "Bagikan Lagu",
+                                subtitle = "Kirim judul atau tautan lagu ke aplikasi lain",
+                                iconTint = glassConfig.textPrimary,
+                                onClick = {
+                                    onShareTrack()
                                     onDismiss()
                                 }
                             )

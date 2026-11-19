@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,6 +32,7 @@ import com.glassroom.music.ui.components.GlassMiniPlayer
 import com.glassroom.music.ui.components.LocalDownloadedTrackIds
 import com.glassroom.music.ui.components.LocalDownloadingTrackIds
 import com.glassroom.music.ui.components.TrackOptionsSheet
+import com.glassroom.music.ui.components.shareTrack
 import com.glassroom.music.ui.home.HomeScreen
 import com.glassroom.music.ui.home.HomeViewModel
 import com.glassroom.music.ui.library.LibraryScreen
@@ -86,14 +88,28 @@ fun GlassroomApp(
     var existingPlaylistIdsForTrack by remember { mutableStateOf<Set<String>>(emptySet()) }
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
     var pendingLibraryTab by remember { mutableStateOf<String?>(null) }
+    var pendingSearchQuery by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
-    fun navigateToOfflineLibrary() {
-        pendingLibraryTab = "Offline"
-        navController.navigate(Screen.Library.route) {
+    fun navigateToTopLevelRoute(route: String) {
+        navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
+    }
+
+    fun navigateToOfflineLibrary() {
+        pendingLibraryTab = "Offline"
+        navigateToTopLevelRoute(Screen.Library.route)
+    }
+
+    fun navigateToArtistSearch(artistName: String) {
+        val clean = artistName.trim()
+        if (clean.isBlank()) return
+        isFullPlayerExpanded = false
+        pendingSearchQuery = clean
+        navigateToTopLevelRoute(Screen.Search.route)
     }
 
     fun handleToggleOfflineDownload(track: Track) {
@@ -224,7 +240,9 @@ fun GlassroomApp(
                         },
                         onPlaylistClick = { playlist ->
                             navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id))
-                        }
+                        },
+                        requestedQuery = pendingSearchQuery,
+                        onRequestedQueryConsumed = { pendingSearchQuery = null }
                     )
                 }
 
@@ -332,6 +350,7 @@ fun GlassroomApp(
                             isLoading = isLoading,
                             onPlayPause = { playerManager.togglePlayPause() },
                             onNext = { playerManager.skipNext() },
+                            onPrevious = { playerManager.skipPrevious() },
                             onClick = { isFullPlayerExpanded = true },
                             onSwipeUp = { isFullPlayerExpanded = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
@@ -355,13 +374,7 @@ fun GlassroomApp(
                 ) {
                     GlassBottomBar(
                         currentRoute = currentRoute,
-                        onNavigate = { route ->
-                            navController.navigate(route) {
-                                popUpTo(Screen.Home.route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
+                        onNavigate = ::navigateToTopLevelRoute
                     )
                 }
             }
@@ -397,6 +410,8 @@ fun GlassroomApp(
                     onToggleOfflineDownload = { track ->
                         handleToggleOfflineDownload(track)
                     },
+                    onArtistClick = ::navigateToArtistSearch,
+                    onShareTrack = { track -> shareTrack(context, track) },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this@AnimatedVisibility
                 )
@@ -469,6 +484,7 @@ fun GlassroomApp(
                     onToggleOfflineDownload = {
                         handleToggleOfflineDownload(selectedTrack)
                     },
+                    onShareTrack = { shareTrack(context, selectedTrack) },
                     onAddToPlaylist = { targetPlaylist ->
                         coroutineScope.launch {
                             app.container.playlistRepository.addTrackToPlaylist(targetPlaylist.id, selectedTrack)
