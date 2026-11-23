@@ -2,6 +2,7 @@ package com.glassroom.music.playback
 
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -60,6 +61,43 @@ class PlayerManager(
     private var autoplayJob: Job? = null
     private var persistJob: Job? = null
     private var sleepTimerJob: Job? = null
+    private var lastPrewarmedTrackId: String? = null
+    private var consecutiveErrorCount: Int = 0
+
+    private val transitionWakeLock: PowerManager.WakeLock? by lazy {
+        try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Veloura::TrackTransition")?.apply {
+                setReferenceCounted(false)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun acquireTransitionWakeLock() {
+        try {
+            transitionWakeLock?.let { wl ->
+                if (!wl.isHeld) {
+                    wl.acquire(30_000L)
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun releaseTransitionWakeLock() {
+        try {
+            transitionWakeLock?.let { wl ->
+                if (wl.isHeld) {
+                    wl.release()
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun maxAutoSkipErrors(): Int = _queue.value.size.coerceIn(1, 3)
 
     init {
         try {
@@ -138,6 +176,7 @@ class PlayerManager(
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true) // true handles audio focus automatically
             .setHandleAudioBecomingNoisy(true) // pauses when headphones unplugged
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build().apply {
                 addListener(playerListener)
             }
@@ -246,6 +285,7 @@ class PlayerManager(
                 }
                 Player.STATE_READY -> {
                     _isLoading.value = false
+                    consecutiveErrorCount = 0
                     _duration.value = exoPlayer.duration.coerceAtLeast(0L)
                 }
                 Player.STATE_ENDED -> {
@@ -271,37 +311,44 @@ class PlayerManager(
 
                 playJob?.cancel()
                 playJob = scope.launch {
-                    val altResult = musicRepository.resolveAlternativeStreamUrl(
-                        trackId = failedTrack.id,
-                        title = failedTrack.title,
-                        artist = failedTrack.artist
-                    )
-                    if (currentPlayToken != failedToken) return@launch
+                    acquireTransitionWakeLock()
+                    try {
+                        val altResult = musicRepository.resolveAlternativeStreamUrl(
+                            trackId = failedTrack.id,
+                            title = failedTrack.title,
+                            artist = failedTrack.artist
+                        )
+                        if (currentPlayToken != failedToken) return@launch
 
-                    val altUrl = altResult.getOrNull().orEmpty()
-                    if (altResult.isSuccess && isValidPlayableUrl(altUrl)) {
-                        prepareAndPlayStream(failedTrack, altUrl)
-                        return@launch
-                    }
+                        val altUrl = altResult.getOrNull().orEmpty()
+                        if (altResult.isSuccess && isValidPlayableUrl(altUrl)) {
+                            prepareAndPlayStream(failedTrack, altUrl)
+                            return@launch
+                        }
 
-                    _isLoading.value = false
-                    _isPlaying.value = false
-                    _playbackError.value = detailedError
-                    delay(1500)
-                    if (currentPlayToken == failedToken && _queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
-                        skipNext()
+                        consecutiveErrorCount++
+                        _isLoading.value = false
+                        _isPlaying.value = false
+                        _playbackError.value = detailedError
+                        delay(1500)
+                        if (currentPlayToken == failedToken && hasNextTrack() && consecutiveErrorCount < maxAutoSkipErrors()) {
+                            skipNext()
+                        }
+                    } finally {
+                        releaseTransitionWakeLock()
                     }
                 }
                 return
             }
 
+            consecutiveErrorCount++
             _isLoading.value = false
             _isPlaying.value = false
             _playbackError.value = detailedError
             scope.launch {
                 // If stream failed, skip to next after brief delay unless user switched track
                 delay(1500)
-                if (currentPlayToken == failedToken && _queue.value.isNotEmpty() && _currentIndex.value < _queue.value.size - 1) {
+                if (currentPlayToken == failedToken && hasNextTrack() && consecutiveErrorCount < maxAutoSkipErrors()) {
                     skipNext()
                 }
             }
@@ -314,10 +361,14 @@ class PlayerManager(
             var ticks = 0
             while (isActive) {
                 if (exoPlayer.isPlaying) {
-                    _currentPosition.value = exoPlayer.currentPosition.coerceAtLeast(0L)
+                    val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                    _currentPosition.value = pos
                     val dur = exoPlayer.duration
                     if (dur > 0) {
                         _duration.value = dur
+                        if (dur - pos in 1_000L..15_000L) {
+                            prewarmNextTrackIfGapless()
+                        }
                     }
                     if (++ticks % 20 == 0) {
                         persistSession()
@@ -359,6 +410,7 @@ class PlayerManager(
     }
 
     fun resumeOrPlayCurrent() {
+        consecutiveErrorCount = 0
         if (exoPlayer.playbackState == Player.STATE_ENDED) {
             exoPlayer.seekTo(0)
         }
@@ -371,6 +423,7 @@ class PlayerManager(
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = listOf(track)) {
+        consecutiveErrorCount = 0
         val targetQueue = if (newQueue.isEmpty()) listOf(track) else newQueue
         val index = targetQueue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
 
@@ -383,6 +436,7 @@ class PlayerManager(
 
     fun playQueue(newQueue: List<Track>, startIndex: Int = 0) {
         if (newQueue.isEmpty()) return
+        consecutiveErrorCount = 0
         val validIndex = startIndex.coerceIn(0, newQueue.size - 1)
         _queue.value = newQueue
         _currentIndex.value = validIndex
@@ -477,7 +531,7 @@ class PlayerManager(
     private fun prewarmNextTrackIfGapless() {
         if (!isGaplessEnabled) return
         val q = _queue.value
-        if (q.size <= 1) return
+        if (q.size <= 1 || _isShuffle.value) return
         val nextIndex = if (_currentIndex.value + 1 < q.size) {
             _currentIndex.value + 1
         } else if (_repeatMode.value == GlassRepeatMode.ALL) {
@@ -486,6 +540,8 @@ class PlayerManager(
             return
         }
         val nextTrack = q[nextIndex]
+        if (lastPrewarmedTrackId == nextTrack.id) return
+        lastPrewarmedTrackId = nextTrack.id
         prewarmJob?.cancel()
         prewarmJob = scope.launch(Dispatchers.IO) {
             try {
@@ -502,6 +558,7 @@ class PlayerManager(
 
         val track = currentList[index]
         val playToken = ++currentPlayToken
+        lastPrewarmedTrackId = null
         _currentTrack.value = track
         _isLoading.value = true
         _playbackError.value = null
@@ -512,73 +569,84 @@ class PlayerManager(
 
         playJob?.cancel()
         playJob = scope.launch {
-            // Save to recently played in local database
-            playlistRepository.addToRecentlyPlayed(track)
+            acquireTransitionWakeLock()
+            try {
+                // Save to recently played in local database
+                playlistRepository.addToRecentlyPlayed(track)
 
-            // Priority 0: Local offline audio file if user saved this track offline
-            val offlineUri = offlineAudioManager?.getOfflineUri(track.id)
-            if (!offlineUri.isNullOrBlank()) {
-                if (currentPlayToken != playToken) return@launch
-                prepareAndPlayStream(track, offlineUri, startPositionMs)
-                prewarmNextTrackIfGapless()
-                return@launch
-            }
-
-            // Resolve direct stream URL via repository/backend
-            val isDirectPlayable = track.streamUrl.isNotBlank() &&
-                    track.streamUrl.startsWith("http") &&
-                    !track.streamUrl.contains("/api/stream") &&
-                    !track.streamUrl.contains("googlevideo.com") &&
-                    !track.streamUrl.contains("commondatastorage.googleapis.com") &&
-                    !track.streamUrl.contains("codeskulptor")
-
-            val resolvedUrl = if (isDirectPlayable) {
-                track.streamUrl
-            } else {
-                val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
-                if (currentPlayToken != playToken) return@launch
-                if (res.isSuccess) {
-                    val direct = res.getOrNull().orEmpty()
-                    if (isValidPlayableUrl(direct)) {
-                        direct
-                    } else {
-                        _isLoading.value = false
-                        _isPlaying.value = false
-                        _playbackError.value = "URL stream audio tidak valid untuk diputar."
-                        return@launch
-                    }
-                } else {
-                    val err = res.exceptionOrNull()
-                    val errorMessage = when (err) {
-                        is AudioStreamException.YouTubeBotBlocked ->
-                            "YouTube menolak akses dari IP server cloud (Anti-Bot: 'Sign in to confirm you\\'re not a bot'). Silakan beralih ke backend lokal di Settings atau hosting VPS."
-                        is AudioStreamException.BackendUnreachable ->
-                            err.message ?: "Tidak dapat terhubung ke server backend audio (${NetworkClient.getBaseUrl()})."
-                        is AudioStreamException.TrackNotFound ->
-                            "Audio stream tidak ditemukan untuk lagu ini (${track.title})."
-                        is AudioStreamException.ServerError ->
-                            "Server backend error (${err.httpCode}): ${err.message}"
-                        else ->
-                            err?.message ?: "Gagal memutar lagu: audio stream tidak tersedia."
-                    }
-                    _isLoading.value = false
-                    _isPlaying.value = false
-                    _playbackError.value = errorMessage
+                // Priority 0: Local offline audio file if user saved this track offline
+                val offlineUri = offlineAudioManager?.getOfflineUri(track.id)
+                if (!offlineUri.isNullOrBlank()) {
+                    if (currentPlayToken != playToken) return@launch
+                    prepareAndPlayStream(track, offlineUri, startPositionMs)
+                    prewarmNextTrackIfGapless()
                     return@launch
                 }
-            }
 
-            // Strictly prohibit dummy sample audio or empty stream
-            if (!isValidPlayableUrl(resolvedUrl)) {
-                _isLoading.value = false
-                _isPlaying.value = false
-                _playbackError.value = "URL stream audio tidak valid atau dilarang."
-                return@launch
-            }
+                // Resolve direct stream URL via repository/backend
+                val isDirectPlayable = track.streamUrl.isNotBlank() &&
+                        track.streamUrl.startsWith("http") &&
+                        !track.streamUrl.contains("/api/stream") &&
+                        !track.streamUrl.contains("googlevideo.com") &&
+                        !track.streamUrl.contains("commondatastorage.googleapis.com") &&
+                        !track.streamUrl.contains("codeskulptor")
 
-            if (currentPlayToken != playToken) return@launch
-            prepareAndPlayStream(track, resolvedUrl, startPositionMs)
-            prewarmNextTrackIfGapless()
+                var resolvedUrl: String? = null
+                var failureMessage: String? = null
+
+                if (isDirectPlayable) {
+                    resolvedUrl = track.streamUrl
+                } else {
+                    val res = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
+                    if (currentPlayToken != playToken) return@launch
+                    val direct = res.getOrNull().orEmpty()
+                    if (res.isSuccess && isValidPlayableUrl(direct)) {
+                        resolvedUrl = direct
+                    } else {
+                        // Retry once with alternative stream resolution before failing
+                        val altRes = musicRepository.resolveAlternativeStreamUrl(track.id, track.title, track.artist)
+                        if (currentPlayToken != playToken) return@launch
+                        val altUrl = altRes.getOrNull().orEmpty()
+                        if (altRes.isSuccess && isValidPlayableUrl(altUrl)) {
+                            resolvedUrl = altUrl
+                        } else {
+                            val err = altRes.exceptionOrNull() ?: res.exceptionOrNull()
+                            failureMessage = when (err) {
+                                is AudioStreamException.YouTubeBotBlocked ->
+                                    "YouTube menolak akses dari IP server cloud (Anti-Bot: 'Sign in to confirm you\\'re not a bot'). Silakan beralih ke backend lokal di Settings atau hosting VPS."
+                                is AudioStreamException.BackendUnreachable ->
+                                    err.message ?: "Tidak dapat terhubung ke server backend audio (${NetworkClient.getBaseUrl()})."
+                                is AudioStreamException.TrackNotFound ->
+                                    "Audio stream tidak ditemukan untuk lagu ini (${track.title})."
+                                is AudioStreamException.ServerError ->
+                                    "Server backend error (${err.httpCode}): ${err.message}"
+                                else ->
+                                    err?.message ?: if (res.isSuccess) "URL stream audio tidak valid untuk diputar."
+                                    else "Gagal memutar lagu: audio stream tidak tersedia."
+                            }
+                        }
+                    }
+                }
+
+                // Strictly prohibit dummy sample audio or empty stream
+                if (resolvedUrl == null || !isValidPlayableUrl(resolvedUrl)) {
+                    consecutiveErrorCount++
+                    _isLoading.value = false
+                    _isPlaying.value = false
+                    _playbackError.value = failureMessage ?: "URL stream audio tidak valid atau dilarang."
+                    delay(1500)
+                    if (currentPlayToken == playToken && hasNextTrack() && consecutiveErrorCount < maxAutoSkipErrors()) {
+                        skipNext()
+                    }
+                    return@launch
+                }
+
+                if (currentPlayToken != playToken) return@launch
+                prepareAndPlayStream(track, resolvedUrl, startPositionMs)
+                prewarmNextTrackIfGapless()
+            } finally {
+                releaseTransitionWakeLock()
+            }
         }
     }
 
@@ -735,36 +803,56 @@ class PlayerManager(
         val tokenSnapshot = currentPlayToken
         autoplayJob?.cancel()
         autoplayJob = scope.launch {
-            _isLoading.value = true
-            val existingIds = _queue.value.map { it.id }.toSet()
-            val query = listOf(seedTrack.artist, seedTrack.title, "mix")
-                .filter { it.isNotBlank() }
-                .joinToString(" ")
-            val searchCandidates = withContext(Dispatchers.IO) {
-                val searched = if (query.isNotBlank()) {
-                    musicRepository.search(query, "songs").getOrNull().orEmpty()
-                } else emptyList()
-                val rec = if (searched.none { it.id !in existingIds }) {
-                    musicRepository.getRecommendations().getOrNull()?.get("trending").orEmpty()
-                } else emptyList()
-                (searched + rec).filter { it.id !in existingIds && it.title.isNotBlank() }
-            }
+            acquireTransitionWakeLock()
+            try {
+                _isLoading.value = true
+                val existingIds = _queue.value.map { it.id }.toSet()
+                val cleanTitle = seedTrack.title
+                    .replace(Regex("\\s*[\\(\\[].*?[\\)\\]]"), "")
+                    .trim()
+                val primaryQuery = listOf(seedTrack.artist, cleanTitle, "mix")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ")
+                val artistQuery = seedTrack.artist.trim()
 
-            if (currentPlayToken != tokenSnapshot) return@launch
-            val nextPick = searchCandidates.firstOrNull()
-            if (nextPick != null) {
-                val updated = _queue.value + nextPick
-                _queue.value = updated
-                _currentIndex.value = updated.size - 1
-                playCurrentIndex()
-            } else {
-                _isLoading.value = false
-                _isPlaying.value = false
+                val searchCandidates = withContext(Dispatchers.IO) {
+                    val primary = if (primaryQuery.isNotBlank()) {
+                        musicRepository.search(primaryQuery, "songs").getOrNull().orEmpty()
+                            .filter { it.id !in existingIds && it.title.isNotBlank() }
+                    } else emptyList()
+
+                    val byArtist = if (primary.isEmpty() && artistQuery.isNotBlank()) {
+                        musicRepository.search(artistQuery, "songs").getOrNull().orEmpty()
+                            .filter { it.id !in existingIds && it.title.isNotBlank() }
+                    } else emptyList()
+
+                    val rec = if (primary.isEmpty() && byArtist.isEmpty()) {
+                        musicRepository.getRecommendations().getOrNull()?.get("trending").orEmpty()
+                            .filter { it.id !in existingIds && it.title.isNotBlank() }
+                    } else emptyList()
+
+                    primary + byArtist + rec
+                }
+
+                if (currentPlayToken != tokenSnapshot) return@launch
+                val nextPick = searchCandidates.firstOrNull()
+                if (nextPick != null) {
+                    val updated = _queue.value + nextPick
+                    _queue.value = updated
+                    _currentIndex.value = updated.size - 1
+                    playCurrentIndex()
+                } else {
+                    _isLoading.value = false
+                    _isPlaying.value = false
+                }
+            } finally {
+                releaseTransitionWakeLock()
             }
         }
     }
 
     private fun handleTrackEnded() {
+        consecutiveErrorCount = 0
         if (_sleepStopAfterCurrentTrack.value) {
             _sleepStopAfterCurrentTrack.value = false
             _isPlaying.value = false
@@ -780,7 +868,7 @@ class PlayerManager(
             }
             GlassRepeatMode.OFF -> {
                 val q = _queue.value
-                if (_currentIndex.value < q.size - 1) {
+                if (_currentIndex.value < q.size - 1 || (_isShuffle.value && q.size > 1)) {
                     skipNext()
                 } else if (isAutoplayEnabled && q.isNotEmpty()) {
                     triggerAutoplaySimilarTrack(q.last())
@@ -799,6 +887,7 @@ class PlayerManager(
         autoplayJob?.cancel()
         persistJob?.cancel()
         sleepTimerJob?.cancel()
+        releaseTransitionWakeLock()
         exoPlayer.removeListener(playerListener)
         exoPlayer.release()
     }

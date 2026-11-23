@@ -22,6 +22,7 @@ import com.glassroom.music.R
 class MusicService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var playerManagerRef: PlayerManager? = null
 
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "veloura_music_playback_live"
@@ -34,6 +35,7 @@ class MusicService : MediaSessionService() {
 
         val app = application as? GlassroomApplication
         val playerManager = app?.container?.playerManager
+        playerManagerRef = playerManager
 
         if (playerManager != null) {
             val sessionActivityPendingIntent = PendingIntent.getActivity(
@@ -74,7 +76,8 @@ class MusicService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0 || player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+        val isTransitioning = playerManagerRef?.isLoading?.value == true
+        if (!isTransitioning && (player == null || !player.playWhenReady || player.mediaItemCount == 0 || player.playbackState == androidx.media3.common.Player.STATE_ENDED)) {
             stopSelf()
         }
     }
