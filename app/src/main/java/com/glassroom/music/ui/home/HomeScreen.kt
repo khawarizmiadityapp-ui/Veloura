@@ -277,36 +277,38 @@ fun HomeScreen(
         }
 
         // Popular Songs Section
-        item {
-            SectionHeader(
-                title = "Lagu Populer",
-                subtitle = "Paling sering diputar di Veloura"
-            )
-        }
-        if (uiState.isLoading && uiState.popularSongs.isEmpty()) {
-            items(4) {
-                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-                    GlassSongSkeleton()
+        if (uiState.isLoading || uiState.popularSongs.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    title = "Lagu Populer",
+                    subtitle = "Paling sering diputar di Veloura"
+                )
+            }
+            if (uiState.isLoading && uiState.popularSongs.isEmpty()) {
+                items(4) {
+                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                        GlassSongSkeleton()
+                    }
+                }
+            } else {
+                itemsIndexed(
+                    items = uiState.popularSongs,
+                    key = { index, track -> "popular_${track.id}_$index" }
+                ) { _, track ->
+                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                        GlassSongCard(
+                            track = track,
+                            isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
+                            onClick = { onTrackClick(track, uiState.popularSongs) },
+                            onFavoriteClick = { viewModel.toggleFavorite(track) },
+                            onMoreClick = { onTrackMoreClick(track) }
+                        )
+                    }
                 }
             }
-        } else {
-            itemsIndexed(
-                items = uiState.popularSongs,
-                key = { index, track -> "popular_${track.id}_$index" }
-            ) { _, track ->
-                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-                    GlassSongCard(
-                        track = track,
-                        isPlaying = currentPlayingTrack?.id == track.id && isPlaying,
-                        onClick = { onTrackClick(track, uiState.popularSongs) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { onTrackMoreClick(track) }
-                    )
-                }
+            item {
+                Spacer(modifier = Modifier.height(18.dp))
             }
-        }
-        item {
-            Spacer(modifier = Modifier.height(18.dp))
         }
 
         // Your Playlists Section

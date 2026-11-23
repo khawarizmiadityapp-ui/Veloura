@@ -9,8 +9,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,7 +28,8 @@ data class BatchDownloadProgress(
     val playlistId: String,
     val completed: Int,
     val total: Int,
-    val currentTitle: String
+    val currentTitle: String,
+    val failedCount: Int = 0
 )
 
 class OfflineAudioManager(
@@ -35,6 +39,9 @@ class OfflineAudioManager(
     private val offlineDir = File(context.filesDir, "offline_audio").apply {
         if (!exists()) mkdirs()
     }
+
+    // Maps safe filenames back to original trackIds so non-alphanumeric IDs stay consistent in UI
+    private val idMapPrefs = context.getSharedPreferences("veloura_offline_id_map", Context.MODE_PRIVATE)
 
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var batchDownloadJob: Job? = null
@@ -60,12 +67,27 @@ class OfflineAudioManager(
     private val _batchProgress = MutableStateFlow<BatchDownloadProgress?>(null)
     val batchProgress: StateFlow<BatchDownloadProgress?> = _batchProgress.asStateFlow()
 
+    private val _batchCompletionEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val batchCompletionEvents: SharedFlow<String> = _batchCompletionEvents.asSharedFlow()
+
     private fun safeFileName(trackId: String): String {
         return trackId.replace(Regex("""[^a-zA-Z0-9_-]"""), "_")
     }
 
     private fun audioFileFor(trackId: String): File {
         return File(offlineDir, "${safeFileName(trackId)}.m4a")
+    }
+
+    private fun resolveTrackIdFromFile(file: File): String {
+        val baseName = file.name.removeSuffix(".m4a")
+        return idMapPrefs.getString(baseName, null) ?: baseName
+    }
+
+    private fun saveIdMapping(trackId: String) {
+        val safeName = safeFileName(trackId)
+        if (idMapPrefs.getString(safeName, null) != trackId) {
+            idMapPrefs.edit().putString(safeName, trackId).apply()
+        }
     }
 
     private fun scanOfflineFiles(): List<File> {
@@ -75,7 +97,7 @@ class OfflineAudioManager(
 
     private fun scanDownloadedIds(): Set<String> {
         return scanOfflineFiles()
-            .map { it.name.removeSuffix(".m4a") }
+            .map { resolveTrackIdFromFile(it) }
             .toSet()
     }
 
@@ -85,7 +107,7 @@ class OfflineAudioManager(
 
     private fun refreshOfflineState() {
         val validFiles = scanOfflineFiles()
-        _downloadedTrackIds.value = validFiles.map { it.name.removeSuffix(".m4a") }.toSet()
+        _downloadedTrackIds.value = validFiles.map { resolveTrackIdFromFile(it) }.toSet()
         _offlineStorageBytes.value = validFiles.sumOf { it.length() }
     }
 
@@ -108,6 +130,7 @@ class OfflineAudioManager(
         musicRepository: MusicRepository
     ): Result<Unit> = withContext(Dispatchers.IO) {
         if (isDownloaded(track.id)) {
+            saveIdMapping(track.id)
             localDataSource.upsertTrack(track)
             refreshOfflineState()
             return@withContext Result.success(Unit)
@@ -172,6 +195,7 @@ class OfflineAudioManager(
                 tmpFile.delete()
             }
 
+            saveIdMapping(track.id)
             refreshOfflineState()
             Result.success(Unit)
         } catch (e: Exception) {
@@ -187,11 +211,17 @@ class OfflineAudioManager(
         tracks: List<Track>,
         musicRepository: MusicRepository
     ) {
+        if (batchDownloadJob?.isActive == true && _batchProgress.value?.playlistId == playlistId) {
+            return
+        }
         val pending = tracks.filterNot { isDownloaded(it.id) }
         if (pending.isEmpty()) return
 
         batchDownloadJob?.cancel()
         batchDownloadJob = managerScope.launch {
+            var successCount = 0
+            var failedCount = 0
+            var cancelled = false
             try {
                 pending.forEachIndexed { idx, track ->
                     ensureActive()
@@ -199,13 +229,30 @@ class OfflineAudioManager(
                         playlistId = playlistId,
                         completed = idx,
                         total = pending.size,
-                        currentTitle = track.title
+                        currentTitle = track.title,
+                        failedCount = failedCount
                     )
-                    downloadTrack(track, musicRepository)
+                    val res = downloadTrack(track, musicRepository)
+                    if (res.isSuccess) {
+                        successCount++
+                    } else {
+                        failedCount++
+                    }
                 }
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                cancelled = true
+                throw ce
             } finally {
                 _batchProgress.value = null
                 refreshOfflineState()
+                if (!cancelled && (successCount > 0 || failedCount > 0)) {
+                    val summary = when {
+                        failedCount == 0 -> "Berhasil mengunduh $successCount lagu untuk offline"
+                        successCount == 0 -> "Gagal mengunduh $failedCount lagu (periksa koneksi)"
+                        else -> "$successCount lagu diunduh, $failedCount lagu gagal"
+                    }
+                    _batchCompletionEvents.tryEmit(summary)
+                }
             }
         }
     }
@@ -217,14 +264,16 @@ class OfflineAudioManager(
     }
 
     suspend fun deleteOfflineTrack(trackId: String) = withContext(Dispatchers.IO) {
+        val safeName = safeFileName(trackId)
         val targetFile = audioFileFor(trackId)
         if (targetFile.exists()) {
             targetFile.delete()
         }
-        val tmpFile = File(offlineDir, "${safeFileName(trackId)}.tmp")
+        val tmpFile = File(offlineDir, "${safeName}.tmp")
         if (tmpFile.exists()) {
             tmpFile.delete()
         }
+        idMapPrefs.edit().remove(safeName).apply()
         refreshOfflineState()
     }
 
@@ -240,6 +289,7 @@ class OfflineAudioManager(
                 }
             }
         }
+        idMapPrefs.edit().clear().apply()
         refreshOfflineState()
         removedCount
     }

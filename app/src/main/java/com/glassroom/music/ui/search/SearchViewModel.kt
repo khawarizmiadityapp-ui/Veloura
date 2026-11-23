@@ -36,6 +36,7 @@ class SearchViewModel(
 
     private val searchQueryFlow = MutableStateFlow("")
     private var searchJob: Job? = null
+    private var suppressNextDebouncedQuery: String? = null
 
     @Volatile
     private var favoriteIds: Set<String> = emptySet()
@@ -74,9 +75,16 @@ class SearchViewModel(
                 .debounce(350)
                 .distinctUntilChanged()
                 .collectLatest { query ->
+                    val trimmed = query.trim()
+                    if (suppressNextDebouncedQuery != null && trimmed == suppressNextDebouncedQuery) {
+                        suppressNextDebouncedQuery = null
+                        return@collectLatest
+                    }
+                    suppressNextDebouncedQuery = null
                     if (query.isNotBlank()) {
                         executeSearch(query, _uiState.value.selectedCategory)
                     } else {
+                        searchJob?.cancel()
                         _uiState.update {
                             it.copy(
                                 results = emptyList(),
@@ -93,6 +101,9 @@ class SearchViewModel(
     }
 
     fun onQueryChange(query: String) {
+        if (suppressNextDebouncedQuery != null && query.trim() != suppressNextDebouncedQuery) {
+            suppressNextDebouncedQuery = null
+        }
         _uiState.update {
             it.copy(
                 query = query,
@@ -108,11 +119,15 @@ class SearchViewModel(
     fun onSearchSubmit() {
         val currentQ = _uiState.value.query.trim()
         if (currentQ.isBlank()) return
+        suppressNextDebouncedQuery = currentQ
+        searchQueryFlow.value = _uiState.value.query
         recordCurrentSearchQuery()
         executeSearch(currentQ, _uiState.value.selectedCategory)
     }
 
     fun selectHistoryOrSuggestion(term: String) {
+        val trimmed = term.trim()
+        suppressNextDebouncedQuery = trimmed
         onQueryChange(term)
         recordQuery(term)
         executeSearch(term, _uiState.value.selectedCategory)

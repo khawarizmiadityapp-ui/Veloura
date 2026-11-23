@@ -78,6 +78,7 @@ fun FullPlayerScreen(
     val currentPosition by playerManager.currentPosition.collectAsState()
     val duration by playerManager.duration.collectAsState()
     val isShuffle by playerManager.isShuffle.collectAsState()
+    val shuffleOrder by playerManager.shuffleOrder.collectAsState()
     val repeatMode by playerManager.repeatMode.collectAsState()
     val queue by playerManager.queue.collectAsState()
     val currentIndex by playerManager.currentIndex.collectAsState()
@@ -507,8 +508,10 @@ fun FullPlayerScreen(
                 currentIndex = currentIndex,
                 currentTrack = currentTrack,
                 isPlaying = isPlaying,
+                isShuffle = isShuffle,
+                shuffleOrder = shuffleOrder,
                 onTrackSelect = { index ->
-                    playerManager.playQueue(queue, index)
+                    playerManager.jumpToQueueIndex(index)
                     showQueueSheet = false
                 },
                 onRemoveFromQueue = { playerManager.removeFromQueue(it) },

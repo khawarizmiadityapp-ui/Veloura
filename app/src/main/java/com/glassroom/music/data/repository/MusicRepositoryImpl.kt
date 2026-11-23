@@ -168,17 +168,10 @@ class MusicRepositoryImpl(
                 val tracks = dtos.map { mapDtoToTrack(it) }
                 Result.success(tracks)
             } else {
-                // Fallback filter
-                val fallback = defaultCuratedTracks.filter {
-                    it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
-                }
-                Result.success(if (fallback.isNotEmpty()) fallback else defaultCuratedTracks.take(3))
+                Result.failure(Exception("Pencarian gagal: HTTP ${response.code()}"))
             }
         } catch (e: Exception) {
-            val fallback = defaultCuratedTracks.filter {
-                it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
-            }
-            Result.success(if (fallback.isNotEmpty()) fallback else defaultCuratedTracks.take(4))
+            Result.failure(e)
         }
     }
 
@@ -854,10 +847,10 @@ class MusicRepositoryImpl(
                 )
                 Result.success(result)
             } else {
-                Result.success(getCuratedRecommendations())
+                Result.failure(Exception("Gagal memuat rekomendasi: HTTP ${response.code()}"))
             }
         } catch (e: Exception) {
-            Result.success(getCuratedRecommendations())
+            Result.failure(e)
         }
     }
 
@@ -1429,6 +1422,13 @@ class MusicRepositoryImpl(
         )
     }
 
+    private val lrclibHttpClient by lazy {
+        onDeviceHttpClient.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
+
     override suspend fun getLyrics(title: String, artist: String): Result<Lyrics> = withContext(Dispatchers.IO) {
         if (title.isBlank()) return@withContext Result.failure(IllegalArgumentException("Title is empty"))
 
@@ -1455,11 +1455,6 @@ class MusicRepositoryImpl(
 
         // 2. Direct fallback to LRCLIB (Directly works on-device even if local backend is offline)
         try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(5, TimeUnit.SECONDS)
-                .readTimeout(8, TimeUnit.SECONDS)
-                .build()
-
             val cleanTitle = title.replace(Regex("""[\(\[\{].*?[\)\]\}]"""), "").trim()
                 .replace(Regex("""\b(feat|ft)\.?\s+.*$""", RegexOption.IGNORE_CASE), "").trim()
             val cleanArtist = artist.replace(Regex("""[\(\[\{].*?[\)\]\}]"""), "").trim()
@@ -1473,20 +1468,21 @@ class MusicRepositoryImpl(
                 .header("User-Agent", "Veloura/1.0 (Android Music Player)")
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful && response.body != null) {
-                val jsonStr = response.body!!.string()
-                val dto = Gson().fromJson(jsonStr, LyricsDto::class.java)
-                val lines = LyricsParser.parse(dto.syncedLyrics)
-                return@withContext Result.success(
-                    Lyrics(
-                        trackTitle = dto.trackName ?: title,
-                        artistName = dto.artistName ?: artist,
-                        plainLyrics = dto.plainLyrics,
-                        syncedLyrics = dto.syncedLyrics,
-                        lines = lines
+            lrclibHttpClient.newCall(request).execute().use { response ->
+                val jsonStr = response.body?.string()
+                if (response.isSuccessful && !jsonStr.isNullOrBlank()) {
+                    val dto = Gson().fromJson(jsonStr, LyricsDto::class.java)
+                    val lines = LyricsParser.parse(dto.syncedLyrics)
+                    return@withContext Result.success(
+                        Lyrics(
+                            trackTitle = dto.trackName ?: title,
+                            artistName = dto.artistName ?: artist,
+                            plainLyrics = dto.plainLyrics,
+                            syncedLyrics = dto.syncedLyrics,
+                            lines = lines
+                        )
                     )
-                )
+                }
             }
 
             // 2b. Direct search fallback on LRCLIB
@@ -1498,24 +1494,24 @@ class MusicRepositoryImpl(
                 .header("User-Agent", "Veloura/1.0 (Android Music Player)")
                 .build()
 
-                
-            val searchResponse = client.newCall(searchRequest).execute()
-            if (searchResponse.isSuccessful && searchResponse.body != null) {
-                val jsonStr = searchResponse.body!!.string()
-                val listType = object : TypeToken<List<LyricsDto>>() {}.type
-                val dtoList: List<LyricsDto>? = Gson().fromJson(jsonStr, listType)
-                val first = dtoList?.firstOrNull()
-                if (first != null) {
-                    val lines = LyricsParser.parse(first.syncedLyrics)
-                    return@withContext Result.success(
-                        Lyrics(
-                            trackTitle = first.trackName ?: title,
-                            artistName = first.artistName ?: artist,
-                            plainLyrics = first.plainLyrics,
-                            syncedLyrics = first.syncedLyrics,
-                            lines = lines
+            lrclibHttpClient.newCall(searchRequest).execute().use { searchResponse ->
+                val jsonStr = searchResponse.body?.string()
+                if (searchResponse.isSuccessful && !jsonStr.isNullOrBlank()) {
+                    val listType = object : TypeToken<List<LyricsDto>>() {}.type
+                    val dtoList: List<LyricsDto>? = Gson().fromJson(jsonStr, listType)
+                    val first = dtoList?.firstOrNull()
+                    if (first != null) {
+                        val lines = LyricsParser.parse(first.syncedLyrics)
+                        return@withContext Result.success(
+                            Lyrics(
+                                trackTitle = first.trackName ?: title,
+                                artistName = first.artistName ?: artist,
+                                plainLyrics = first.plainLyrics,
+                                syncedLyrics = first.syncedLyrics,
+                                lines = lines
+                            )
                         )
-                    )
+                    }
                 }
             }
         } catch (_: Exception) {

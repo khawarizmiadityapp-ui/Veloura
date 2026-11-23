@@ -129,6 +129,9 @@ class PlayerManager(
                         _currentTrack.value = restoredTrack
                         _currentPosition.value = snapshot.positionMs
                         _duration.value = if (restoredTrack.duration > 0) restoredTrack.duration * 1000L else 0L
+                        if (_isShuffle.value) {
+                            rebuildShuffleOrder(snapshot.queue.size, snapshot.currentIndex)
+                        }
                         fetchLyrics(restoredTrack)
                     }
                 }
@@ -246,6 +249,9 @@ class PlayerManager(
 
     private val _isShuffle = MutableStateFlow(false)
     val isShuffle: StateFlow<Boolean> = _isShuffle.asStateFlow()
+
+    private val _shuffleOrder = MutableStateFlow<List<Int>>(emptyList())
+    val shuffleOrder: StateFlow<List<Int>> = _shuffleOrder.asStateFlow()
 
     private val _repeatMode = MutableStateFlow(GlassRepeatMode.OFF)
     val repeatMode: StateFlow<GlassRepeatMode> = _repeatMode.asStateFlow()
@@ -400,11 +406,48 @@ class PlayerManager(
         }
     }
 
+    private fun rebuildShuffleOrder(size: Int, anchorIndex: Int) {
+        if (size <= 0) {
+            _shuffleOrder.value = emptyList()
+            return
+        }
+        val validAnchor = anchorIndex.coerceIn(0, size - 1)
+        val rest = (0 until size).filter { it != validAnchor }.shuffled()
+        _shuffleOrder.value = listOf(validAnchor) + rest
+    }
+
+    private fun ensureShuffleOrder() {
+        val qSize = _queue.value.size
+        if (qSize <= 0) {
+            _shuffleOrder.value = emptyList()
+            return
+        }
+        val currentOrder = _shuffleOrder.value
+        if (currentOrder.size != qSize || _currentIndex.value !in currentOrder) {
+            rebuildShuffleOrder(qSize, _currentIndex.value)
+        }
+    }
+
+    private fun getNextTrackIndex(): Int? {
+        val q = _queue.value
+        if (q.isEmpty()) return null
+        if (_isShuffle.value) {
+            val order = _shuffleOrder.value
+            if (order.size != q.size) return null
+            val pos = order.indexOf(_currentIndex.value)
+            return if (pos >= 0 && pos + 1 < order.size) order[pos + 1] else null
+        }
+        val nextIdx = _currentIndex.value + 1
+        return if (nextIdx < q.size) nextIdx else null
+    }
+
     fun hasNextTrack(): Boolean {
         val q = _queue.value
         if (q.isEmpty()) return false
-        return _currentIndex.value < q.size - 1 ||
-            _isShuffle.value ||
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
+        }
+        return getNextTrackIndex() != null ||
             _repeatMode.value != GlassRepeatMode.OFF ||
             isAutoplayEnabled
     }
@@ -430,6 +473,11 @@ class PlayerManager(
         _queue.value = targetQueue
         _currentIndex.value = index
         _currentTrack.value = track
+        if (_isShuffle.value) {
+            rebuildShuffleOrder(targetQueue.size, index)
+        } else {
+            _shuffleOrder.value = emptyList()
+        }
 
         playCurrentIndex()
     }
@@ -441,7 +489,36 @@ class PlayerManager(
         _queue.value = newQueue
         _currentIndex.value = validIndex
         _currentTrack.value = newQueue[validIndex]
+        if (_isShuffle.value) {
+            rebuildShuffleOrder(newQueue.size, validIndex)
+        } else {
+            _shuffleOrder.value = emptyList()
+        }
 
+        playCurrentIndex()
+    }
+
+    fun jumpToQueueIndex(index: Int) {
+        val q = _queue.value
+        if (index !in q.indices) return
+        consecutiveErrorCount = 0
+        val prevIndex = _currentIndex.value
+        _currentIndex.value = index
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
+            val order = _shuffleOrder.value
+            val targetPos = order.indexOf(index)
+            if (targetPos >= 0) {
+                val prevPos = order.indexOf(prevIndex)
+                val mutable = order.toMutableList()
+                mutable.removeAt(targetPos)
+                val insertPos = if (prevPos >= 0) (prevPos + 1).coerceIn(0, mutable.size) else 0
+                mutable.add(insertPos, index)
+                _shuffleOrder.value = mutable
+            } else {
+                rebuildShuffleOrder(q.size, index)
+            }
+        }
         playCurrentIndex()
     }
 
@@ -454,6 +531,14 @@ class PlayerManager(
         val insertIndex = (_currentIndex.value + 1).coerceIn(0, currentList.size)
         currentList.add(insertIndex, track)
         _queue.value = currentList
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
+            val shifted = _shuffleOrder.value.map { idx -> if (idx >= insertIndex) idx + 1 else idx }.toMutableList()
+            val curPos = shifted.indexOf(_currentIndex.value)
+            val shuffleInsertPos = if (curPos >= 0) curPos + 1 else 0
+            shifted.add(shuffleInsertPos.coerceIn(0, shifted.size), insertIndex)
+            _shuffleOrder.value = shifted
+        }
         persistSession()
     }
 
@@ -465,6 +550,10 @@ class PlayerManager(
         }
         currentList.add(track)
         _queue.value = currentList
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
+            _shuffleOrder.value = _shuffleOrder.value + currentList.lastIndex
+        }
         persistSession()
     }
 
@@ -531,15 +620,13 @@ class PlayerManager(
     private fun prewarmNextTrackIfGapless() {
         if (!isGaplessEnabled) return
         val q = _queue.value
-        if (q.size <= 1 || _isShuffle.value) return
-        val nextIndex = if (_currentIndex.value + 1 < q.size) {
-            _currentIndex.value + 1
-        } else if (_repeatMode.value == GlassRepeatMode.ALL) {
-            0
-        } else {
-            return
+        if (q.size <= 1) return
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
         }
-        val nextTrack = q[nextIndex]
+        val nextIndex = getNextTrackIndex()
+            ?: if (_repeatMode.value == GlassRepeatMode.ALL && !_isShuffle.value) 0 else return
+        val nextTrack = q.getOrNull(nextIndex) ?: return
         if (lastPrewarmedTrackId == nextTrack.id) return
         lastPrewarmedTrackId = nextTrack.id
         prewarmJob?.cancel()
@@ -695,21 +782,26 @@ class PlayerManager(
             return
         }
 
-        val nextIndex = if (_isShuffle.value) {
-            val randomIndices = q.indices.filter { it != _currentIndex.value }
-            if (randomIndices.isNotEmpty()) randomIndices.random() else _currentIndex.value
-        } else {
-            _currentIndex.value + 1
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
         }
 
-        if (nextIndex < q.size) {
+        val nextIndex = getNextTrackIndex()
+        if (nextIndex != null) {
             _currentIndex.value = nextIndex
             playCurrentIndex()
         } else if (_repeatMode.value == GlassRepeatMode.ALL) {
-            _currentIndex.value = 0
+            if (_isShuffle.value) {
+                val remaining = q.indices.filter { it != _currentIndex.value }.shuffled()
+                val nextRound = if (remaining.isNotEmpty()) remaining else listOf(0)
+                _shuffleOrder.value = nextRound
+                _currentIndex.value = nextRound.first()
+            } else {
+                _currentIndex.value = 0
+            }
             playCurrentIndex()
         } else if (isAutoplayEnabled) {
-            triggerAutoplaySimilarTrack(q.last())
+            triggerAutoplaySimilarTrack(_currentTrack.value ?: q.last())
         }
     }
 
@@ -723,14 +815,37 @@ class PlayerManager(
         val q = _queue.value
         if (q.isEmpty()) return
 
-        val prevIndex = (_currentIndex.value - 1).coerceAtLeast(0)
-        _currentIndex.value = prevIndex
-        playCurrentIndex()
+        if (_isShuffle.value) {
+            ensureShuffleOrder()
+            val order = _shuffleOrder.value
+            val pos = order.indexOf(_currentIndex.value)
+            if (pos > 0) {
+                _currentIndex.value = order[pos - 1]
+                playCurrentIndex()
+                return
+            }
+        } else if (_currentIndex.value > 0) {
+            _currentIndex.value -= 1
+            playCurrentIndex()
+            return
+        }
+
+        if (exoPlayer.mediaItemCount > 0) {
+            exoPlayer.seekTo(0)
+            _currentPosition.value = 0L
+        } else {
+            playCurrentIndex()
+        }
     }
 
     fun toggleShuffle() {
         val newVal = !_isShuffle.value
         _isShuffle.value = newVal
+        if (newVal) {
+            rebuildShuffleOrder(_queue.value.size, _currentIndex.value)
+        } else {
+            _shuffleOrder.value = emptyList()
+        }
         preferencesManager?.let { prefs ->
             scope.launch(Dispatchers.IO) { prefs.setShuffle(newVal) }
         }
@@ -753,14 +868,22 @@ class PlayerManager(
         if (index in currentList.indices) {
             currentList.removeAt(index)
             _queue.value = currentList
-            if (index < _currentIndex.value) {
-                _currentIndex.value -= 1
-            } else if (index == _currentIndex.value && currentList.isNotEmpty()) {
+            val oldCurrent = _currentIndex.value
+            if (_isShuffle.value) {
+                _shuffleOrder.value = _shuffleOrder.value
+                    .filter { it != index }
+                    .map { idx -> if (idx > index) idx - 1 else idx }
+            }
+            if (index < oldCurrent) {
+                _currentIndex.value = oldCurrent - 1
+            } else if (index == oldCurrent && currentList.isNotEmpty()) {
                 val newIdx = index.coerceAtMost(currentList.size - 1)
                 _currentIndex.value = newIdx
+                if (_isShuffle.value) ensureShuffleOrder()
                 playCurrentIndex()
                 return
             }
+            if (_isShuffle.value) ensureShuffleOrder()
             persistSession()
         }
     }
@@ -771,12 +894,17 @@ class PlayerManager(
             val item = currentList.removeAt(fromIndex)
             currentList.add(toIndex, item)
             _queue.value = currentList
-            val currentIdx = _currentIndex.value
-            _currentIndex.value = when {
-                fromIndex == currentIdx -> toIndex
-                fromIndex < currentIdx && toIndex >= currentIdx -> currentIdx - 1
-                fromIndex > currentIdx && toIndex <= currentIdx -> currentIdx + 1
-                else -> currentIdx
+            val remapIndex: (Int) -> Int = { idx ->
+                when {
+                    fromIndex == idx -> toIndex
+                    fromIndex < idx && toIndex >= idx -> idx - 1
+                    fromIndex > idx && toIndex <= idx -> idx + 1
+                    else -> idx
+                }
+            }
+            _currentIndex.value = remapIndex(_currentIndex.value)
+            if (_isShuffle.value) {
+                _shuffleOrder.value = _shuffleOrder.value.map(remapIndex)
             }
             persistSession()
         }
@@ -786,6 +914,7 @@ class PlayerManager(
         playJob?.cancel()
         lyricsJob?.cancel()
         _queue.value = emptyList()
+        _shuffleOrder.value = emptyList()
         _currentTrack.value = null
         _currentIndex.value = 0
         exoPlayer.stop()
@@ -839,6 +968,10 @@ class PlayerManager(
                 if (nextPick != null) {
                     val updated = _queue.value + nextPick
                     _queue.value = updated
+                    if (_isShuffle.value) {
+                        ensureShuffleOrder()
+                        _shuffleOrder.value = _shuffleOrder.value + (updated.size - 1)
+                    }
                     _currentIndex.value = updated.size - 1
                     playCurrentIndex()
                 } else {
@@ -868,10 +1001,13 @@ class PlayerManager(
             }
             GlassRepeatMode.OFF -> {
                 val q = _queue.value
-                if (_currentIndex.value < q.size - 1 || (_isShuffle.value && q.size > 1)) {
+                if (_isShuffle.value) {
+                    ensureShuffleOrder()
+                }
+                if (getNextTrackIndex() != null) {
                     skipNext()
                 } else if (isAutoplayEnabled && q.isNotEmpty()) {
-                    triggerAutoplaySimilarTrack(q.last())
+                    triggerAutoplaySimilarTrack(_currentTrack.value ?: q.last())
                 } else {
                     _isPlaying.value = false
                 }

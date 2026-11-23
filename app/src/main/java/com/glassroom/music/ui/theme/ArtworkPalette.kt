@@ -10,7 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import coil.ImageLoader
+import coil.Coil
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Scale
@@ -97,7 +97,7 @@ suspend fun extractArtworkColors(context: Context, track: Track): ArtworkColors 
     }
 
     try {
-        val loader = ImageLoader(context)
+        val loader = Coil.imageLoader(context)
         val request = ImageRequest.Builder(context)
             .data(track.thumbnail)
             .size(24, 24)

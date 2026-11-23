@@ -76,6 +76,12 @@ fun PlaylistDetailScreen(
     val batchProgress by (offlineAudioManager?.batchProgress
         ?: kotlinx.coroutines.flow.flowOf(null)).collectAsState(initial = null)
 
+    LaunchedEffect(offlineAudioManager) {
+        offlineAudioManager?.batchCompletionEvents?.collect { summary ->
+            onShowMessage?.invoke(summary)
+        }
+    }
+
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }

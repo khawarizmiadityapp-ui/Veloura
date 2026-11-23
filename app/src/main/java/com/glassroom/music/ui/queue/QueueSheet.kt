@@ -44,6 +44,8 @@ fun QueueSheet(
     currentIndex: Int,
     currentTrack: Track?,
     isPlaying: Boolean,
+    isShuffle: Boolean = false,
+    shuffleOrder: List<Int> = emptyList(),
     onTrackSelect: (Int) -> Unit,
     onRemoveFromQueue: (Int) -> Unit,
     onClearQueue: () -> Unit,
@@ -54,8 +56,24 @@ fun QueueSheet(
     val glassConfig = LocalGlassConfig.current
     var isReordering by remember { mutableStateOf(false) }
 
-    val upcomingTracks = remember(queue, currentIndex) {
-        queue.filterIndexed { index, _ -> index > currentIndex }
+    val upcomingEntries = remember(queue, currentIndex, isShuffle, shuffleOrder) {
+        if (isShuffle && shuffleOrder.size == queue.size) {
+            val pos = shuffleOrder.indexOf(currentIndex)
+            val upcomingIndices = if (pos >= 0) shuffleOrder.drop(pos + 1) else shuffleOrder
+            upcomingIndices.mapNotNull { idx ->
+                queue.getOrNull(idx)?.let { track -> idx to track }
+            }
+        } else {
+            queue.mapIndexedNotNull { index, track ->
+                if (index > currentIndex) index to track else null
+            }
+        }
+    }
+
+    LaunchedEffect(isShuffle) {
+        if (isShuffle && isReordering) {
+            isReordering = false
+        }
     }
 
     ModalBottomSheet(
@@ -146,11 +164,17 @@ fun QueueSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Berikutnya (${upcomingTracks.size})",
+                    text = "Berikutnya (${upcomingEntries.size})",
                     style = GlassTypography.titleMedium,
                     color = glassConfig.textSecondary
                 )
-                if (upcomingTracks.size > 1) {
+                if (isShuffle && upcomingEntries.isNotEmpty()) {
+                    Text(
+                        text = "Urutan acak aktif",
+                        style = GlassTypography.labelSmall,
+                        color = glassConfig.accentPrimary
+                    )
+                } else if (!isShuffle && upcomingEntries.size > 1) {
                     GlassChip(
                         text = if (isReordering) "Selesai" else "Atur Urutan",
                         isSelected = isReordering,
@@ -159,7 +183,7 @@ fun QueueSheet(
                 }
             }
 
-            if (queue.isEmpty() || queue.size == 1 || upcomingTracks.isEmpty()) {
+            if (queue.isEmpty() || queue.size == 1 || upcomingEntries.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,15 +203,14 @@ fun QueueSheet(
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
                     itemsIndexed(
-                        items = upcomingTracks,
-                        key = { offset, track -> "queue_${track.id}_$offset" }
-                    ) { offset, track ->
-                        val actualIndex = currentIndex + 1 + offset
+                        items = upcomingEntries,
+                        key = { offset, (actualIndex, track) -> "queue_${actualIndex}_${track.id}_$offset" }
+                    ) { offset, (actualIndex, track) ->
                         QueueUpcomingRow(
                             track = track,
-                            isReordering = isReordering,
+                            isReordering = isReordering && !isShuffle,
                             canMoveUp = offset > 0,
-                            canMoveDown = offset < upcomingTracks.lastIndex,
+                            canMoveDown = offset < upcomingEntries.lastIndex,
                             onSelect = { onTrackSelect(actualIndex) },
                             onMoveUp = { onReorderQueue(actualIndex, actualIndex - 1) },
                             onMoveDown = { onReorderQueue(actualIndex, actualIndex + 1) },

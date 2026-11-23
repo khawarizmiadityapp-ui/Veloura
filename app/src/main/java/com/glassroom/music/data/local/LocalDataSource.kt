@@ -60,16 +60,19 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
         if (trackIds.isEmpty()) return@withContext emptyList()
         val db = dbHelper.readableDatabase
         val favIds = readFavoriteTrackIds(db)
-        val placeholders = trackIds.joinToString(",") { "?" }
-        val cursor = db.rawQuery(
-            "SELECT * FROM ${GlassroomDbHelper.TABLE_TRACKS} WHERE id IN ($placeholders)",
-            trackIds.toTypedArray()
-        )
         val result = mutableListOf<Track>()
-        cursor.use {
-            while (it.moveToNext()) {
-                val track = mapCursorToTrack(it)
-                result.add(track.copy(isFavorite = track.id in favIds))
+        // Chunk parameters to stay safely below SQLite's 999 bind variable limit
+        trackIds.toList().chunked(500).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            val cursor = db.rawQuery(
+                "SELECT * FROM ${GlassroomDbHelper.TABLE_TRACKS} WHERE id IN ($placeholders)",
+                chunk.toTypedArray()
+            )
+            cursor.use {
+                while (it.moveToNext()) {
+                    val track = mapCursorToTrack(it)
+                    result.add(track.copy(isFavorite = track.id in favIds))
+                }
             }
         }
         result
@@ -228,9 +231,7 @@ class LocalDataSource(private val dbHelper: GlassroomDbHelper) {
         val db = dbHelper.writableDatabase
         val cv = ContentValues().apply {
             put("name", newName)
-            if (newDescription.isNotBlank()) {
-                put("description", newDescription)
-            }
+            put("description", newDescription)
         }
         db.update(GlassroomDbHelper.TABLE_PLAYLISTS, cv, "id = ?", arrayOf(playlistId))
         dbHelper.notifyPlaylistsChanged()
