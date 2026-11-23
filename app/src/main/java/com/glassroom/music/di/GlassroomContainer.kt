@@ -33,6 +33,9 @@ class GlassroomContainer(context: Context) {
     )
 
     init {
+        // Apply cached server URL synchronously before initial UI API requests fire
+        NetworkClient.updateBaseUrl(preferencesManager.getCachedBackendUrlSync())
+
         // Synchronize backend URL from preferences on startup
         CoroutineScope(Dispatchers.IO).launch {
             preferencesManager.backendUrlFlow.collect { url ->

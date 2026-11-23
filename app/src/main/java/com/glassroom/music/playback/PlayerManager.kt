@@ -599,14 +599,11 @@ class PlayerManager(
             .build()
 
         withContext(Dispatchers.Main) {
-            exoPlayer.setMediaItem(mediaItem)
-            if (startPositionMs > 0L) {
-                exoPlayer.seekTo(startPositionMs)
-            }
+            exoPlayer.setMediaItem(mediaItem, startPositionMs.coerceAtLeast(0L))
             exoPlayer.prepare()
             exoPlayer.play()
             _isPlaying.value = true
-            _currentPosition.value = startPositionMs
+            _currentPosition.value = startPositionMs.coerceAtLeast(0L)
             _duration.value = if (track.duration > 0) track.duration * 1000L else 0L
 
             try {

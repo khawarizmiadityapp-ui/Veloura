@@ -7,10 +7,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -66,6 +68,7 @@ fun GlassroomApp(
     val currentPosition by playerManager.currentPosition.collectAsState()
     val duration by playerManager.duration.collectAsState()
     val isLoading by playerManager.isLoading.collectAsState()
+    val playbackError by playerManager.playbackError.collectAsState()
 
     var isFullPlayerExpanded by remember { mutableStateOf(false) }
 
@@ -146,6 +149,13 @@ fun GlassroomApp(
         if (actionFeedbackMessage != null) {
             delay(2400L)
             actionFeedbackMessage = null
+        }
+    }
+
+    LaunchedEffect(playbackError, isFullPlayerExpanded) {
+        if (playbackError != null && !isFullPlayerExpanded) {
+            delay(4500L)
+            playerManager.clearPlaybackError()
         }
     }
 
@@ -415,6 +425,53 @@ fun GlassroomApp(
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this@AnimatedVisibility
                 )
+            }
+
+            // Playback error pill when user is outside FullPlayer
+            AnimatedVisibility(
+                visible = playbackError != null && !isFullPlayerExpanded,
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(tween(180)),
+                exit = fadeOut(tween(180)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(
+                        horizontal = 24.dp,
+                        vertical = if (currentTrack != null) 160.dp else 92.dp
+                    )
+            ) {
+                playbackError?.let { errMsg ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = RoundedCornerShape(20.dp),
+                                ambientColor = glassConfig.shadowAmbient,
+                                spotColor = glassConfig.shadowSpot
+                            )
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(brush = glassConfig.miniPlayerBrush)
+                            .border(1.dp, androidx.compose.ui.graphics.Color(0x66F43F5E), RoundedCornerShape(20.dp))
+                            .clickable { playerManager.clearPlaybackError() }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.WarningAmber,
+                            contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color(0xFFF43F5E),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = errMsg,
+                            style = GlassTypography.labelSmall,
+                            color = glassConfig.textPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
 
             // Action confirmation feedback pill

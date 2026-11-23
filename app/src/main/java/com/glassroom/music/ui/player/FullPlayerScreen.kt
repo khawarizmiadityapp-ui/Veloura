@@ -281,6 +281,7 @@ fun FullPlayerScreen(
                         ) {
                             FullPlayerCenterMedia(
                                 track = activeTrack,
+                                isPlaying = isPlaying,
                                 showLyrics = showLyrics,
                                 lyrics = lyrics,
                                 isLyricsLoading = isLyricsLoading,
@@ -395,6 +396,7 @@ fun FullPlayerScreen(
 
                     FullPlayerCenterMedia(
                         track = activeTrack,
+                        isPlaying = isPlaying,
                         showLyrics = showLyrics,
                         lyrics = lyrics,
                         isLyricsLoading = isLyricsLoading,
@@ -662,6 +664,7 @@ private fun FullPlayerErrorBanner(
 @Composable
 private fun FullPlayerCenterMedia(
     track: Track,
+    isPlaying: Boolean,
     showLyrics: Boolean,
     lyrics: Lyrics?,
     isLyricsLoading: Boolean,
@@ -694,6 +697,7 @@ private fun FullPlayerCenterMedia(
                 currentPositionMs = currentPositionMs,
                 onSeek = onSeekLyrics,
                 onRetry = onRetryLyrics,
+                isPlaying = isPlaying,
                 containerHeight = lyricsHeight
             )
         } else {

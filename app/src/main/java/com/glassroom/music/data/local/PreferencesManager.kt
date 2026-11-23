@@ -26,6 +26,8 @@ private val Context.dataStore by preferencesDataStore(name = "glassroom_preferen
 
 class PreferencesManager(private val context: Context) {
 
+    private val fastSyncPrefs = context.getSharedPreferences("veloura_fast_sync_prefs", Context.MODE_PRIVATE)
+
     companion object {
         val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         val KEY_BACKEND_URL = stringPreferencesKey("backend_url")
@@ -63,11 +65,20 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_CUSTOM_SERVER_SELECTED] ?: false
     }
 
+    fun getCachedBackendUrlSync(): String {
+        val raw = fastSyncPrefs.getString("cached_backend_url", null)?.trim()
+        return if (raw.isNullOrBlank()) NetworkClient.DEFAULT_BASE_URL else NetworkClient.normalizeBaseUrl(raw)
+    }
+
+    private fun cacheBackendUrlSync(normalizedUrl: String) {
+        fastSyncPrefs.edit().putString("cached_backend_url", normalizedUrl).apply()
+    }
+
     val backendUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
         val saved = prefs[KEY_BACKEND_URL]?.trim()
         val isExplicitCustom = prefs[KEY_CUSTOM_SERVER_SELECTED] ?: false
 
-        if (saved.isNullOrBlank()) {
+        val resolved = if (saved.isNullOrBlank()) {
             NetworkClient.DEFAULT_BASE_URL
         } else if (!isExplicitCustom) {
             // Prevent old cached laptop/emulator IPs from overriding cloud production default
@@ -80,6 +91,8 @@ class PreferencesManager(private val context: Context) {
         } else {
             NetworkClient.normalizeBaseUrl(saved)
         }
+        cacheBackendUrlSync(resolved)
+        resolved
     }
 
     val gaplessFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -112,6 +125,7 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setBackendUrl(url: String, isCustom: Boolean = true) {
         val normalized = NetworkClient.normalizeBaseUrl(url)
+        cacheBackendUrlSync(normalized)
         context.dataStore.edit { prefs ->
             prefs[KEY_BACKEND_URL] = normalized
             prefs[KEY_CUSTOM_SERVER_SELECTED] = isCustom
@@ -120,6 +134,7 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun resetToDefaultBackendUrl() {
+        cacheBackendUrlSync(NetworkClient.DEFAULT_BASE_URL)
         context.dataStore.edit { prefs ->
             prefs[KEY_BACKEND_URL] = NetworkClient.DEFAULT_BASE_URL
             prefs[KEY_CUSTOM_SERVER_SELECTED] = false

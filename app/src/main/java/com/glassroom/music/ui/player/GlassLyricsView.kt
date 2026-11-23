@@ -113,6 +113,7 @@ fun GlassLyricsView(
     onSeek: (Long) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    isPlaying: Boolean = true,
     containerHeight: Dp = 350.dp
 ) {
     val glassConfig = LocalGlassConfig.current
@@ -390,7 +391,7 @@ fun GlassLyricsView(
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             MiniEqualizerBars(
-                                                isPlaying = true,
+                                                isPlaying = isPlaying,
                                                 color = glassConfig.accentPrimary
                                             )
                                             Spacer(modifier = Modifier.width(10.dp))
