@@ -141,17 +141,34 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(20.dp))
 
                         // Adaptive Surface Tuning: Glass Translucency or Paper Texture & Warmth
-                        val intensityPercent = (glassIntensity * 100).toInt()
+                        var sliderIntensity by remember { mutableFloatStateOf(glassIntensity) }
+                        var isDraggingSlider by remember { mutableStateOf(false) }
+
+                        LaunchedEffect(glassIntensity) {
+                            if (!isDraggingSlider) {
+                                sliderIntensity = glassIntensity
+                            }
+                        }
+
+                        LaunchedEffect(sliderIntensity, isDraggingSlider) {
+                            if (isDraggingSlider) {
+                                kotlinx.coroutines.delay(32L)
+                                preferencesManager.setGlassIntensity(sliderIntensity)
+                            }
+                        }
+
+                        val displayIntensity = if (isDraggingSlider) sliderIntensity else glassIntensity
+                        val intensityPercent = (displayIntensity * 100).toInt()
                         val intensityLabel = if (glassConfig.isPaper) {
                             when {
-                                glassIntensity < 0.45f -> "Putih Gading"
-                                glassIntensity < 0.82f -> "Serat Katun"
+                                displayIntensity < 0.45f -> "Putih Gading"
+                                displayIntensity < 0.82f -> "Serat Katun"
                                 else -> "Perkamen Hangat"
                             }
                         } else {
                             when {
-                                glassIntensity < 0.45f -> "Bening Kristal"
-                                glassIntensity < 0.82f -> "Kaca Buram"
+                                displayIntensity < 0.45f -> "Bening Kristal"
+                                displayIntensity < 0.82f -> "Kaca Buram"
                                 else -> "Kaca Pekat"
                             }
                         }
@@ -181,10 +198,15 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         androidx.compose.material3.Slider(
-                            value = glassIntensity,
+                            value = displayIntensity,
                             onValueChange = { newVal ->
+                                isDraggingSlider = true
+                                sliderIntensity = newVal
+                            },
+                            onValueChangeFinished = {
+                                isDraggingSlider = false
                                 coroutineScope.launch {
-                                    preferencesManager.setGlassIntensity(newVal)
+                                    preferencesManager.setGlassIntensity(sliderIntensity)
                                 }
                             },
                             valueRange = 0.25f..0.95f,
@@ -198,40 +220,52 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Quick Presets
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Quick Presets (evenly balanced single-line chips)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             GlassChip(
-                                text = if (glassConfig.isPaper) "Gading (35%)" else "💎 Bening (35%)",
-                                isSelected = (glassIntensity - 0.35f).let { kotlin.math.abs(it) < 0.05f },
+                                text = if (glassConfig.isPaper) "Gading 35%" else "Bening 35%",
+                                isSelected = kotlin.math.abs(displayIntensity - 0.35f) < 0.05f,
                                 onClick = {
+                                    isDraggingSlider = false
+                                    sliderIntensity = 0.35f
                                     coroutineScope.launch {
                                         preferencesManager.setGlassIntensity(0.35f)
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
                             )
                             GlassChip(
-                                text = if (glassConfig.isPaper) "Katun (75%)" else "❄️ Buram (75%)",
-                                isSelected = (glassIntensity - 0.75f).let { kotlin.math.abs(it) < 0.05f },
+                                text = if (glassConfig.isPaper) "Katun 75%" else "Buram 75%",
+                                isSelected = kotlin.math.abs(displayIntensity - 0.75f) < 0.05f,
                                 onClick = {
+                                    isDraggingSlider = false
+                                    sliderIntensity = 0.75f
                                     coroutineScope.launch {
                                         preferencesManager.setGlassIntensity(0.75f)
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
                             )
                             GlassChip(
-                                text = if (glassConfig.isPaper) "Klasik (95%)" else "🥛 Pekat (95%)",
-                                isSelected = (glassIntensity - 0.95f).let { kotlin.math.abs(it) < 0.05f },
+                                text = if (glassConfig.isPaper) "Klasik 95%" else "Pekat 95%",
+                                isSelected = kotlin.math.abs(displayIntensity - 0.95f) < 0.05f,
                                 onClick = {
+                                    isDraggingSlider = false
+                                    sliderIntensity = 0.95f
                                     coroutineScope.launch {
                                         preferencesManager.setGlassIntensity(0.95f)
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
                             )
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Live Mini Preview inside card
+                        // Live Mini Preview inside card with colorful refraction backing so glass effect is unmistakable
                         Text(
                             text = if (glassConfig.isPaper) "Pratinjau Kertas:" else "Pratinjau Kaca Veloura:",
                             style = GlassTypography.labelSmall,
@@ -242,19 +276,40 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(brush = glassConfig.cardBrush)
-                                .border(1.dp, glassConfig.borderHighlight, RoundedCornerShape(16.dp))
-                                .padding(12.dp)
+                                .background(
+                                    if (glassConfig.isPaper) {
+                                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                            listOf(Color(0xFFE7D8BF), Color(0xFFDDC8A8))
+                                        )
+                                    } else {
+                                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                            listOf(
+                                                Color(0xFF06B6D4).copy(alpha = if (glassConfig.isDark) 0.55f else 0.45f),
+                                                Color(0xFF8B5CF6).copy(alpha = if (glassConfig.isDark) 0.55f else 0.40f),
+                                                Color(0xFF10B981).copy(alpha = if (glassConfig.isDark) 0.50f else 0.40f)
+                                            )
+                                        )
+                                    }
+                                )
                         ) {
-                            Text(
-                                text = if (glassConfig.isPaper) {
-                                    "Kertas Veloura: Hangat, matte, bertekstur serat & tinta tajam"
-                                } else {
-                                    "Kaca Veloura: Transparan, halus, & berkedalaman optik"
-                                },
-                                style = GlassTypography.bodyMedium,
-                                color = glassConfig.textPrimary
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(brush = glassConfig.cardBrush)
+                                    .border(1.dp, glassConfig.borderBrush, RoundedCornerShape(16.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = if (glassConfig.isPaper) {
+                                        "Kertas Veloura: Hangat, matte, bertekstur serat & tinta tajam"
+                                    } else {
+                                        "Kaca Veloura: Transparan, halus, & berkedalaman optik"
+                                    },
+                                    style = GlassTypography.bodyMedium,
+                                    color = glassConfig.textPrimary
+                                )
+                            }
                         }
                     }
                 }

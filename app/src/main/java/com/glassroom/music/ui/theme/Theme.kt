@@ -1,12 +1,16 @@
 package com.glassroom.music.ui.theme
 
 import android.app.Activity
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
@@ -73,10 +77,18 @@ fun GlassroomTheme(
         effectiveDark -> DarkColorScheme
         else -> LightColorScheme
     }
+    val animatedIntensity by animateFloatAsState(
+        targetValue = glassIntensity.coerceIn(0.2f, 1.0f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "veloura_glass_intensity"
+    )
     val glassConfig = GlassConfig(
         isDark = effectiveDark,
         isPaper = paperTheme,
-        intensity = glassIntensity
+        intensity = animatedIntensity
     )
 
     val view = LocalView.current

@@ -106,26 +106,31 @@ data class GlassConfig(
     val isPaper: Boolean = false,
     val intensity: Float = 0.75f // Glass: 0.25..0.95 opacity | Paper: 0.25..0.95 warmth & grain
 ) {
+    // Normalized 0..1 curve across the 0.25..0.95 slider for crisp, unmistakable transparency steps
+    private val normalizedIntensity: Float
+        get() = ((intensity - 0.22f) / 0.73f).coerceIn(0f, 1f)
+
     val cardBrush: Brush
         get() {
             val factor = intensity.coerceIn(0.2f, 1.0f)
+            val t = normalizedIntensity
             if (isPaper) {
-                val top = lerp(Color(0xFFFFFEF9), Color(0xFFF9F1E2), factor)
-                val bottom = lerp(Color(0xFFFBF6EC), Color(0xFFEEE2CD), factor)
+                val top = lerp(Color(0xFFFFFEF9), Color(0xFFF6ECDA), factor)
+                val bottom = lerp(Color(0xFFFAF4E8), Color(0xFFEBDCC2), factor)
                 return Brush.verticalGradient(listOf(top, bottom))
             }
             return if (isDark) {
-                val topAlpha = (factor * 0.45f).coerceIn(0.20f, 0.55f)
-                val bottomAlpha = (factor * 0.26f).coerceIn(0.10f, 0.36f)
+                val topAlpha = (0.07f + t * 0.84f).coerceIn(0.06f, 0.92f)
+                val bottomAlpha = (0.03f + t * 0.79f).coerceIn(0.03f, 0.84f)
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF2A364B).copy(alpha = topAlpha),
-                        Color(0xFF121722).copy(alpha = bottomAlpha)
+                        Color(0xFF28354A).copy(alpha = topAlpha),
+                        Color(0xFF101622).copy(alpha = bottomAlpha)
                     )
                 )
             } else {
-                val topAlpha = (factor * 0.78f).coerceIn(0.45f, 0.88f)
-                val bottomAlpha = (factor * 0.46f).coerceIn(0.22f, 0.58f)
+                val topAlpha = (0.14f + t * 0.82f).coerceIn(0.14f, 0.96f)
+                val bottomAlpha = (0.07f + t * 0.81f).coerceIn(0.07f, 0.88f)
                 Brush.verticalGradient(
                     listOf(
                         Color(0xFFFFFFFF).copy(alpha = topAlpha),
@@ -136,30 +141,33 @@ data class GlassConfig(
         }
 
     val borderBrush: Brush
-        get() = when {
-            isPaper -> Brush.verticalGradient(
-                listOf(
-                    Color(0xFFF5EFE3),
-                    Color(0xFFD8CAB4),
-                    Color(0xFFC7B69C)
+        get() {
+            val t = normalizedIntensity
+            return when {
+                isPaper -> Brush.verticalGradient(
+                    listOf(
+                        Color(0xFFF5EFE3),
+                        Color(0xFFD8CAB4),
+                        Color(0xFFC7B69C)
+                    )
                 )
-            )
-            isDark -> Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.45f),
-                    Color.White.copy(alpha = 0.16f),
-                    Color(0xFF818CF8).copy(alpha = 0.22f),
-                    Color(0x33000000)
+                isDark -> Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.52f - t * 0.16f),
+                        Color.White.copy(alpha = 0.18f - t * 0.04f),
+                        Color(0xFF38BDF8).copy(alpha = 0.26f - t * 0.10f),
+                        Color(0x33000000)
+                    )
                 )
-            )
-            else -> Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.95f),
-                    Color.White.copy(alpha = 0.52f),
-                    Color(0xFF38BDF8).copy(alpha = 0.28f),
-                    Color(0x260F172A)
+                else -> Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.96f),
+                        Color.White.copy(alpha = 0.62f - t * 0.14f),
+                        Color(0xFF38BDF8).copy(alpha = 0.30f - t * 0.10f),
+                        Color(0x260F172A)
+                    )
                 )
-            )
+            }
         }
 
     val backgroundBrush: Brush
@@ -214,6 +222,7 @@ data class GlassConfig(
     val miniPlayerBrush: Brush
         get() {
             val factor = intensity.coerceIn(0.2f, 1.0f)
+            val t = normalizedIntensity
             if (isPaper) {
                 val top = lerp(Color(0xFFFFFEFA), Color(0xFFFAF3E4), factor)
                 val bottom = lerp(Color(0xFFF9F2E4), Color(0xFFF0E4CF), factor)
@@ -222,15 +231,15 @@ data class GlassConfig(
             return if (isDark) {
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF222C3E).copy(alpha = (0.86f + factor * 0.10f).coerceIn(0.86f, 0.96f)),
-                        Color(0xFF101520).copy(alpha = (0.82f + factor * 0.12f).coerceIn(0.82f, 0.94f))
+                        Color(0xFF222D40).copy(alpha = (0.34f + t * 0.62f).coerceIn(0.32f, 0.96f)),
+                        Color(0xFF0E1420).copy(alpha = (0.24f + t * 0.70f).coerceIn(0.22f, 0.94f))
                     )
                 )
             } else {
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = (0.90f + factor * 0.08f).coerceIn(0.90f, 0.98f)),
-                        Color(0xFFF1F5F9).copy(alpha = (0.84f + factor * 0.12f).coerceIn(0.84f, 0.96f))
+                        Color.White.copy(alpha = (0.42f + t * 0.56f).coerceIn(0.40f, 0.98f)),
+                        Color(0xFFF1F5F9).copy(alpha = (0.30f + t * 0.66f).coerceIn(0.28f, 0.96f))
                     )
                 )
             }
@@ -271,10 +280,23 @@ data class GlassConfig(
         }
 
     val chipUnselectedBrush: Brush
-        get() = when {
-            isPaper -> Brush.verticalGradient(listOf(Color(0xFFFBF7EE), Color(0xFFEFE6D6)))
-            isDark -> Brush.verticalGradient(listOf(Color(0x2EFFFFFF), Color(0x14FFFFFF)))
-            else -> Brush.verticalGradient(listOf(Color(0xE0FFFFFF), Color(0x99FFFFFF)))
+        get() {
+            val t = normalizedIntensity
+            return when {
+                isPaper -> Brush.verticalGradient(listOf(Color(0xFFFBF7EE), Color(0xFFEFE6D6)))
+                isDark -> Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF334155).copy(alpha = (0.14f + t * 0.56f).coerceIn(0.14f, 0.70f)),
+                        Color(0xFF1E293B).copy(alpha = (0.08f + t * 0.52f).coerceIn(0.08f, 0.60f))
+                    )
+                )
+                else -> Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = (0.28f + t * 0.64f).coerceIn(0.28f, 0.92f)),
+                        Color(0xFFE2E8F0).copy(alpha = (0.16f + t * 0.62f).coerceIn(0.16f, 0.78f))
+                    )
+                )
+            }
         }
 
     val activePlayingCardBrush: Brush

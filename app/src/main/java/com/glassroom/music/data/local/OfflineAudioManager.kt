@@ -147,41 +147,63 @@ class OfflineAudioManager(
         try {
             localDataSource.upsertTrack(track)
 
-            val streamResult = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
-            val streamUrl = streamResult.getOrNull()
-                ?: return@withContext Result.failure(
-                    streamResult.exceptionOrNull() ?: IllegalStateException("Gagal mendapatkan URL audio")
-                )
-
             val defaultUa =
                 "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-            val userAgent = NetworkClient.getStreamUserAgent(streamUrl, defaultUa)
 
-            val request = Request.Builder()
-                .url(streamUrl)
-                .header("User-Agent", userAgent)
-                .get()
-                .build()
+            fun downloadFromUrl(streamUrl: String): Result<Unit> {
+                val userAgent = NetworkClient.getStreamUserAgent(streamUrl, defaultUa)
+                val request = Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", userAgent)
+                    .get()
+                    .build()
 
-            downloadHttpClient.newCall(request).execute().use { response ->
-                val body = response.body
-                if (!response.isSuccessful || body == null) {
-                    return@withContext Result.failure(
-                        IllegalStateException("Unduhan gagal: HTTP ${response.code}")
-                    )
-                }
+                downloadHttpClient.newCall(request).execute().use { response ->
+                    val body = response.body
+                    if (!response.isSuccessful || body == null) {
+                        return Result.failure(
+                            IllegalStateException("Unduhan gagal: HTTP ${response.code}")
+                        )
+                    }
 
-                body.byteStream().use { input ->
-                    FileOutputStream(tmpFile).use { output ->
-                        val buffer = ByteArray(16 * 1024)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
+                    body.byteStream().use { input ->
+                        FileOutputStream(tmpFile).use { output ->
+                            val buffer = ByteArray(16 * 1024)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                output.write(buffer, 0, read)
+                            }
+                            output.flush()
                         }
-                        output.flush()
                     }
                 }
+                return Result.success(Unit)
+            }
+
+            val streamResult = musicRepository.resolveStreamUrl(track.id, track.title, track.artist)
+            val initialUrl = streamResult.getOrNull()
+            var downloadOutcome: Result<Unit> = if (!initialUrl.isNullOrBlank()) {
+                downloadFromUrl(initialUrl)
+            } else {
+                Result.failure(
+                    streamResult.exceptionOrNull() ?: IllegalStateException("Gagal mendapatkan URL audio")
+                )
+            }
+
+            // Retry once with a fresh/alternative stream URL if cached URL expired (e.g., HTTP 403)
+            if (downloadOutcome.isFailure) {
+                tmpFile.delete()
+                val altResult = musicRepository.resolveAlternativeStreamUrl(track.id, track.title, track.artist)
+                val altUrl = altResult.getOrNull()
+                if (!altUrl.isNullOrBlank()) {
+                    downloadOutcome = downloadFromUrl(altUrl)
+                }
+            }
+
+            if (downloadOutcome.isFailure) {
+                tmpFile.delete()
+                return@withContext downloadOutcome
             }
 
             if (!tmpFile.exists() || tmpFile.length() <= 1024L) {
