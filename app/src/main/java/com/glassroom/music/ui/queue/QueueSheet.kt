@@ -214,7 +214,8 @@ fun QueueSheet(
                             onSelect = { onTrackSelect(actualIndex) },
                             onMoveUp = { onReorderQueue(actualIndex, actualIndex - 1) },
                             onMoveDown = { onReorderQueue(actualIndex, actualIndex + 1) },
-                            onRemove = { onRemoveFromQueue(actualIndex) }
+                            onRemove = { onRemoveFromQueue(actualIndex) },
+                            modifier = Modifier.animateItem()
                         )
                     }
                 }
@@ -232,7 +233,8 @@ private fun QueueUpcomingRow(
     onSelect: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val glassConfig = LocalGlassConfig.current
 
@@ -240,7 +242,7 @@ private fun QueueUpcomingRow(
         onClick = if (isReordering) null else onSelect,
         shape = RoundedCornerShape(18.dp),
         elevation = 1.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier

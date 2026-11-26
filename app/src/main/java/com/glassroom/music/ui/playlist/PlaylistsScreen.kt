@@ -411,7 +411,12 @@ fun PlaylistsScreen(
     // Create New Playlist Dialog
     if (uiState.showCreateDialog) {
         val inputBg = glassConfig.inputSurfaceColor
-        GlassDialog(onDismissRequest = { viewModel.closeCreateDialog() }) {
+        val dismissCreateDialog: () -> Unit = {
+            newPlaylistName = ""
+            newPlaylistDesc = ""
+            viewModel.closeCreateDialog()
+        }
+        GlassDialog(onDismissRequest = dismissCreateDialog) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Playlist Baru",
@@ -480,7 +485,7 @@ fun PlaylistsScreen(
                 ) {
                     GlassButton(
                         text = "Batal",
-                        onClick = { viewModel.closeCreateDialog() }
+                        onClick = dismissCreateDialog
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     GlassButton(

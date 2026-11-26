@@ -39,39 +39,53 @@ fun VelouraBackdrop(
     currentTrack: Track? = null,
     isPlaying: Boolean = false,
     isFullPlayer: Boolean = false,
+    isActive: Boolean = true,
     artworkColors: ArtworkColors = rememberAnimatedArtworkColors(track = currentTrack)
 ) {
     val glassConfig = LocalGlassConfig.current
 
-    // Organic luminous breathing animations for authentic glass refraction depth
-    val infiniteTransition = rememberInfiniteTransition(label = "glass_ambient")
-    val pulse1 by infiniteTransition.animateFloat(
-        initialValue = if (isPlaying) 0.88f else 0.94f,
-        targetValue = if (isPlaying) 1.18f else 1.06f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambient_pulse_1"
-    )
-    val pulse2 by infiniteTransition.animateFloat(
-        initialValue = if (isPlaying) 1.14f else 1.04f,
-        targetValue = if (isPlaying) 0.88f else 0.96f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambient_pulse_2"
-    )
-    val pulse3 by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 7200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambient_pulse_3"
-    )
+    // Run organic luminous breathing animations only when backdrop is visible, playing, and non-Paper
+    val shouldAnimatePulse = isActive && isPlaying && !glassConfig.isPaper
+    val pulse1: Float
+    val pulse2: Float
+    val pulse3: Float
+    if (shouldAnimatePulse) {
+        val infiniteTransition = rememberInfiniteTransition(label = "glass_ambient")
+        val p1 by infiniteTransition.animateFloat(
+            initialValue = 0.88f,
+            targetValue = 1.18f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 6500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "ambient_pulse_1"
+        )
+        val p2 by infiniteTransition.animateFloat(
+            initialValue = 1.14f,
+            targetValue = 0.88f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 8000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "ambient_pulse_2"
+        )
+        val p3 by infiniteTransition.animateFloat(
+            initialValue = 0.94f,
+            targetValue = 1.12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 7200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "ambient_pulse_3"
+        )
+        pulse1 = p1
+        pulse2 = p2
+        pulse3 = p3
+    } else {
+        pulse1 = 1.0f
+        pulse2 = 1.0f
+        pulse3 = 1.0f
+    }
 
     // Smooth animation when transitioning into the full player
     val playerBloomTransition by animateFloatAsState(

@@ -555,7 +555,11 @@ fun PlaylistDetailScreen(
                         items = displayedTracks,
                         key = { index, track -> "detail_track_${track.id}_$index" }
                     ) { index, track ->
-                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .animateItem()
+                                .padding(vertical = 4.dp)
+                        ) {
                             if (isReorderMode) {
                                 PlaylistReorderRow(
                                     track = track,

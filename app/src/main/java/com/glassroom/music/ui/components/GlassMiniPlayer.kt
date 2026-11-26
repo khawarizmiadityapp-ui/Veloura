@@ -40,28 +40,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.glassroom.music.domain.model.Track
 import com.glassroom.music.ui.theme.*
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun GlassMiniPlayer(
     track: Track,
     isPlaying: Boolean,
-    currentPositionMs: Long,
-    durationMs: Long,
+    currentPositionFlow: StateFlow<Long>,
+    durationFlow: StateFlow<Long>,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit = {},
@@ -72,17 +71,6 @@ fun GlassMiniPlayer(
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
-    val progress = if (durationMs > 0) {
-        (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    // Smooth progress interpolation to avoid discrete steps
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = tween(durationMillis = 250, easing = LinearEasing),
-        label = "mini_progress_anim"
-    )
-
     // Debouncing rapid taps
     var lastTapTime by remember { mutableLongStateOf(0L) }
     val debounceMs = 280L
@@ -127,10 +115,9 @@ fun GlassMiniPlayer(
         }
     }
 
+    var verticalDragY by remember { mutableFloatStateOf(0f) }
     val draggableState = rememberDraggableState { delta ->
-        if (delta < -12) { // Swiped up with gentle threshold
-            safeOnSwipeUp()
-        }
+        verticalDragY = (verticalDragY + delta).coerceIn(-120f, 40f)
     }
 
     var horizontalDragX by remember { mutableFloatStateOf(0f) }
@@ -205,7 +192,13 @@ fun GlassMiniPlayer(
             )
             .draggable(
                 state = draggableState,
-                orientation = Orientation.Vertical
+                orientation = Orientation.Vertical,
+                onDragStopped = {
+                    if (verticalDragY <= -40f) {
+                        safeOnSwipeUp()
+                    }
+                    verticalDragY = 0f
+                }
             )
             .draggable(
                 state = horizontalDraggableState,
@@ -230,7 +223,7 @@ fun GlassMiniPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .offset { IntOffset(animatedHorizontalOffset.roundToInt(), 0) }
+                    .graphicsLayer { translationX = animatedHorizontalOffset }
                     .padding(horizontal = 12.dp, vertical = 9.dp)
             ) {
                 // Artwork Container with Shared Element and Fallback Placeholder
@@ -315,7 +308,10 @@ fun GlassMiniPlayer(
                 // Play / Pause Glass Orb Button with Loading Spinner support
                 Box(
                     modifier = Modifier
-                        .scale(playBtnScale)
+                        .graphicsLayer {
+                            scaleX = playBtnScale
+                            scaleY = playBtnScale
+                        }
                         .size(42.dp)
                         .shadow(4.dp, CircleShape, spotColor = glassConfig.shadowSpot)
                         .clip(CircleShape)
@@ -374,7 +370,10 @@ fun GlassMiniPlayer(
                 // Next Track Glass Button with tactile spring feedback
                 Box(
                     modifier = Modifier
-                        .scale(nextBtnScale)
+                        .graphicsLayer {
+                            scaleX = nextBtnScale
+                            scaleY = nextBtnScale
+                        }
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(glassConfig.inactiveTrackColor)
@@ -394,25 +393,49 @@ fun GlassMiniPlayer(
                 }
             }
 
-            // Slim luminous progress indicator on the bottom edge with rounded bottom corners
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp))
-                    .background(glassConfig.inactiveTrackColor)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(animatedProgress)
-                        .fillMaxHeight()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(glassConfig.accentPrimary, glassConfig.accentSecondary)
-                            )
-                        )
-                )
-            }
+            // Isolated progress bar so 250ms position ticks only recompose this 3dp strip
+            MiniPlayerProgressBar(
+                currentPositionFlow = currentPositionFlow,
+                durationFlow = durationFlow
+            )
         }
+    }
+}
+
+@Composable
+private fun MiniPlayerProgressBar(
+    currentPositionFlow: StateFlow<Long>,
+    durationFlow: StateFlow<Long>
+) {
+    val glassConfig = LocalGlassConfig.current
+    val currentPositionMs by currentPositionFlow.collectAsState()
+    val durationMs by durationFlow.collectAsState()
+    val progress = if (durationMs > 0) {
+        (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 250, easing = LinearEasing),
+        label = "mini_progress_anim"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .clip(RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp))
+            .background(glassConfig.inactiveTrackColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(animatedProgress)
+                .fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(glassConfig.accentPrimary, glassConfig.accentSecondary)
+                    )
+                )
+        )
     }
 }

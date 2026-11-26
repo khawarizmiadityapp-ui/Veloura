@@ -22,9 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -107,22 +107,25 @@ fun GlassBottomBar(
                         label = "nav_scale"
                     )
 
-                    val pillBg = if (isSelected) {
-                        glassConfig.activePillBg
-                    } else {
-                        Color.Transparent
-                    }
+                    val pillBg by animateColorAsState(
+                        targetValue = if (isSelected) glassConfig.activePillBg else Color.Transparent,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "nav_pill_bg"
+                    )
 
-                    val pillBorder = if (isSelected) {
-                        glassConfig.activePillBorder
-                    } else {
-                        Color.Transparent
-                    }
+                    val pillBorder by animateColorAsState(
+                        targetValue = if (isSelected) glassConfig.activePillBorder else Color.Transparent,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "nav_pill_border"
+                    )
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .scale(scale)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
                             .clip(RoundedCornerShape(20.dp))
                             .clickable(
                                 interactionSource = interactionSource,

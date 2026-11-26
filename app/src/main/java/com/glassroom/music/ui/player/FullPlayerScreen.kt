@@ -34,16 +34,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -54,7 +53,7 @@ import com.glassroom.music.playback.PlayerManager
 import com.glassroom.music.ui.components.*
 import com.glassroom.music.ui.queue.QueueSheet
 import com.glassroom.music.ui.theme.*
-import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -75,8 +74,6 @@ fun FullPlayerScreen(
 ) {
     val currentTrack by playerManager.currentTrack.collectAsState()
     val isPlaying by playerManager.isPlaying.collectAsState()
-    val currentPosition by playerManager.currentPosition.collectAsState()
-    val duration by playerManager.duration.collectAsState()
     val isShuffle by playerManager.isShuffle.collectAsState()
     val shuffleOrder by playerManager.shuffleOrder.collectAsState()
     val repeatMode by playerManager.repeatMode.collectAsState()
@@ -107,8 +104,8 @@ fun FullPlayerScreen(
         label = "full_collapse_y"
     )
 
+    // Keep collapseDragY in place while AnimatedVisibility slides FullPlayer out (prevents snap-back flicker)
     val triggerCollapse: () -> Unit = {
-        collapseDragY = 0f
         onCollapse()
     }
 
@@ -126,16 +123,26 @@ fun FullPlayerScreen(
         }
     )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "artwork_float")
-    val artworkScale by infiniteTransition.animateFloat(
-        initialValue = if (isPlaying) 1.0f else 0.98f,
-        targetValue = if (isPlaying) 1.025f else 0.98f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale_anim"
-    )
+    val artworkScale: Float = if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition(label = "artwork_float")
+        val breathing by infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.025f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 3000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "scale_anim"
+        )
+        breathing
+    } else {
+        val resting by animateFloatAsState(
+            targetValue = 0.98f,
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+            label = "scale_rest_anim"
+        )
+        resting
+    }
 
     val glassConfig = LocalGlassConfig.current
     val artworkColors = rememberAnimatedArtworkColors(track = currentTrack)
@@ -208,7 +215,10 @@ fun FullPlayerScreen(
             modifier = Modifier
                 .align(Alignment.Center)
                 .size(360.dp)
-                .scale(artworkScale)
+                .graphicsLayer {
+                    scaleX = artworkScale
+                    scaleY = artworkScale
+                }
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
@@ -238,7 +248,7 @@ fun FullPlayerScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .offset { IntOffset(0, animatedCollapseY.roundToInt()) }
+                .graphicsLayer { translationY = animatedCollapseY }
         ) {
             val isLandscape = maxWidth > maxHeight && maxWidth >= 520.dp
             val isCompactHeight = maxHeight < 660.dp
@@ -285,7 +295,7 @@ fun FullPlayerScreen(
                                 showLyrics = showLyrics,
                                 lyrics = lyrics,
                                 isLyricsLoading = isLyricsLoading,
-                                currentPositionMs = currentPosition,
+                                currentPositionFlow = playerManager.currentPosition,
                                 artworkSize = artworkSize,
                                 lyricsHeight = lyricsHeight,
                                 artworkScale = artworkScale,
@@ -328,9 +338,10 @@ fun FullPlayerScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            GlassSlider(
-                                positionMs = currentPosition,
-                                durationMs = duration,
+                            FullPlayerSliderSection(
+                                trackId = activeTrack.id,
+                                currentPositionFlow = playerManager.currentPosition,
+                                durationFlow = playerManager.duration,
                                 onSeek = { playerManager.seekTo(it) }
                             )
 
@@ -400,7 +411,7 @@ fun FullPlayerScreen(
                         showLyrics = showLyrics,
                         lyrics = lyrics,
                         isLyricsLoading = isLyricsLoading,
-                        currentPositionMs = currentPosition,
+                        currentPositionFlow = playerManager.currentPosition,
                         artworkSize = artworkSize,
                         lyricsHeight = lyricsHeight,
                         artworkScale = artworkScale,
@@ -442,9 +453,10 @@ fun FullPlayerScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    GlassSlider(
-                        positionMs = currentPosition,
-                        durationMs = duration,
+                    FullPlayerSliderSection(
+                        trackId = activeTrack.id,
+                        currentPositionFlow = playerManager.currentPosition,
+                        durationFlow = playerManager.duration,
                         onSeek = { playerManager.seekTo(it) }
                     )
 
@@ -596,7 +608,12 @@ private fun FullPlayerTopBar(
                 label = "lyrics_btn_scale"
             )
 
-            Box(modifier = Modifier.scale(lyricsBtnScale)) {
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    scaleX = lyricsBtnScale
+                    scaleY = lyricsBtnScale
+                }
+            ) {
                 GlassIconButton(
                     icon = Icons.Filled.Lyrics,
                     onClick = onToggleLyrics,
@@ -662,13 +679,30 @@ private fun FullPlayerErrorBanner(
 }
 
 @Composable
+private fun FullPlayerSliderSection(
+    trackId: String,
+    currentPositionFlow: StateFlow<Long>,
+    durationFlow: StateFlow<Long>,
+    onSeek: (Long) -> Unit
+) {
+    val currentPosition by currentPositionFlow.collectAsState()
+    val duration by durationFlow.collectAsState()
+    GlassSlider(
+        positionMs = currentPosition,
+        durationMs = duration,
+        onSeek = onSeek,
+        trackId = trackId
+    )
+}
+
+@Composable
 private fun FullPlayerCenterMedia(
     track: Track,
     isPlaying: Boolean,
     showLyrics: Boolean,
     lyrics: Lyrics?,
     isLyricsLoading: Boolean,
-    currentPositionMs: Long,
+    currentPositionFlow: StateFlow<Long>,
     artworkSize: Dp,
     lyricsHeight: Dp,
     artworkScale: Float,
@@ -691,6 +725,7 @@ private fun FullPlayerCenterMedia(
         modifier = Modifier.fillMaxWidth()
     ) { isLyricsMode ->
         if (isLyricsMode) {
+            val currentPositionMs by currentPositionFlow.collectAsState()
             GlassLyricsView(
                 lyrics = lyrics,
                 isLoading = isLyricsLoading,
@@ -710,8 +745,11 @@ private fun FullPlayerCenterMedia(
                 Box(
                     modifier = artworkSharedModifier
                         .size(artworkSize)
-                        .offset { IntOffset(animatedArtworkOffsetX.roundToInt(), 0) }
-                        .scale(artworkScale)
+                        .graphicsLayer {
+                            translationX = animatedArtworkOffsetX
+                            scaleX = artworkScale
+                            scaleY = artworkScale
+                        }
                         .draggable(
                             orientation = Orientation.Horizontal,
                             state = rememberDraggableState(onArtworkDrag),
@@ -859,7 +897,12 @@ private fun FullPlayerMetadataRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(modifier = Modifier.scale(favScale)) {
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    scaleX = favScale
+                    scaleY = favScale
+                }
+            ) {
                 GlassIconButton(
                     icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     onClick = onToggleFavorite,

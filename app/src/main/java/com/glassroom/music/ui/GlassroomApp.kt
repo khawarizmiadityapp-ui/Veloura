@@ -65,8 +65,6 @@ fun GlassroomApp(
     val playerManager = app.container.playerManager
     val currentTrack by playerManager.currentTrack.collectAsState()
     val isPlaying by playerManager.isPlaying.collectAsState()
-    val currentPosition by playerManager.currentPosition.collectAsState()
-    val duration by playerManager.duration.collectAsState()
     val isLoading by playerManager.isLoading.collectAsState()
     val playbackError by playerManager.playbackError.collectAsState()
 
@@ -173,7 +171,8 @@ fun GlassroomApp(
             com.glassroom.music.ui.components.VelouraBackdrop(
                 currentTrack = currentTrack,
                 isPlaying = isPlaying,
-                isFullPlayer = isFullPlayerExpanded
+                isFullPlayer = isFullPlayerExpanded,
+                isActive = !isFullPlayerExpanded
             )
 
             // Main Navigation Content with fluid directional transitions
@@ -355,8 +354,8 @@ fun GlassroomApp(
                         GlassMiniPlayer(
                             track = track,
                             isPlaying = isPlaying,
-                            currentPositionMs = currentPosition,
-                            durationMs = duration,
+                            currentPositionFlow = playerManager.currentPosition,
+                            durationFlow = playerManager.duration,
                             isLoading = isLoading,
                             onPlayPause = { playerManager.togglePlayPause() },
                             onNext = { playerManager.skipNext() },

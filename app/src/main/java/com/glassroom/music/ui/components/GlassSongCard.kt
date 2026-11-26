@@ -27,10 +27,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,7 +85,10 @@ fun GlassSongCard(
 
     Box(
         modifier = modifier
-            .scale(cardScale)
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
             .fillMaxWidth()
             .shadow(
                 elevation = if (glassConfig.isPaper) (if (isPlaying) 3.dp else 1.dp) else (if (isPlaying) 6.dp else 2.dp),
@@ -234,7 +237,10 @@ fun GlassSongCard(
 
                 Box(
                     modifier = Modifier
-                        .scale(favScale)
+                        .graphicsLayer {
+                            scaleX = favScale
+                            scaleY = favScale
+                        }
                         .size(34.dp)
                         .clip(CircleShape)
                         .clickable(
@@ -264,7 +270,10 @@ fun GlassSongCard(
 
                 Box(
                     modifier = Modifier
-                        .scale(moreScale)
+                        .graphicsLayer {
+                            scaleX = moreScale
+                            scaleY = moreScale
+                        }
                         .size(34.dp)
                         .clip(CircleShape)
                         .clickable(

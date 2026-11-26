@@ -17,9 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassroom.music.ui.theme.*
@@ -30,11 +30,16 @@ fun GlassSlider(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackId: String = ""
 ) {
     val glassConfig = LocalGlassConfig.current
     var isDragging by remember { mutableStateOf(false) }
     var dragPosition by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(trackId) {
+        isDragging = false
+    }
 
     val safeDuration = durationMs.coerceAtLeast(1L).toFloat()
     val rawProgress = (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
@@ -86,9 +91,11 @@ fun GlassSlider(
                 dragPosition = it
             },
             onValueChangeFinished = {
-                isDragging = false
-                val targetMs = (dragPosition * safeDuration).toLong()
-                onSeek(targetMs)
+                if (isDragging) {
+                    isDragging = false
+                    val targetMs = (dragPosition * safeDuration).toLong()
+                    onSeek(targetMs)
+                }
             },
             colors = SliderDefaults.colors(
                 thumbColor = activeColor,
@@ -98,7 +105,10 @@ fun GlassSlider(
             thumb = {
                 Box(
                     modifier = Modifier
-                        .scale(thumbScale)
+                        .graphicsLayer {
+                            scaleX = thumbScale
+                            scaleY = thumbScale
+                        }
                         .size(16.dp)
                         .shadow(
                             elevation = if (isDragging) 8.dp else 4.dp,

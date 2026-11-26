@@ -21,10 +21,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.glassroom.music.playback.GlassRepeatMode
 import com.glassroom.music.ui.theme.*
@@ -86,27 +86,6 @@ fun GlassPlayerControl(
         label = "play_scale"
     )
 
-    // Breathing pulse glow aura around play button when music is active
-    val infiniteTransition = rememberInfiniteTransition(label = "play_pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = if (isPlaying) 1.22f else 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = if (isPlaying) 0.65f else 0.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_alpha"
-    )
-
     // Shuffle & Repeat Active State
     val isRepeatActive = repeatMode != GlassRepeatMode.OFF
     val repeatIcon = when (repeatMode) {
@@ -156,12 +135,35 @@ fun GlassPlayerControl(
             modifier = Modifier.size(88.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Ambient breathing pulse glow
+            // Ambient breathing pulse glow (infinite transition only runs while playing)
             if (isPlaying) {
+                val pulseTransition = rememberInfiniteTransition(label = "play_pulse")
+                val pulseScale by pulseTransition.animateFloat(
+                    initialValue = 1.0f,
+                    targetValue = 1.22f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulse_scale"
+                )
+                val pulseAlpha by pulseTransition.animateFloat(
+                    initialValue = 0.25f,
+                    targetValue = 0.65f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulse_alpha"
+                )
                 Box(
                     modifier = Modifier
                         .size(80.dp)
-                        .scale(pulseScale)
+                        .graphicsLayer {
+                            scaleX = pulseScale
+                            scaleY = pulseScale
+                            alpha = pulseAlpha
+                        }
                         .clip(CircleShape)
                         .background(
                             brush = Brush.radialGradient(
@@ -182,8 +184,7 @@ fun GlassPlayerControl(
                                         Color.Transparent
                                     )
                                 }
-                            ),
-                            alpha = pulseAlpha
+                            )
                         )
                 )
             }
@@ -191,7 +192,10 @@ fun GlassPlayerControl(
             // Main Play Glass Orb
             Box(
                 modifier = Modifier
-                    .scale(playScale)
+                    .graphicsLayer {
+                        scaleX = playScale
+                        scaleY = playScale
+                    }
                     .size(74.dp)
                     .shadow(
                         elevation = if (glassConfig.isPaper) 10.dp else 16.dp,
